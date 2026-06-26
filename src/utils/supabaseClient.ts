@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { Book } from "../types";
 
-// روابط مشروعك الحقيقية تم الحفاظ عليها وتفعيلها بالكامل
+// الروابط الحقيقية والخاصة بمشروعك
 const supabaseUrl = "https://jzztpvefyqqyewiygdaa.supabase.co".trim();
 const supabaseAnonKey = "sb_publishable_8T3dT2NJqcSHX0FkG0K6eg_IknNAY2b".trim();
 
@@ -29,13 +29,14 @@ export async function getSupabaseBooks(): Promise<Book[] | null> {
 
     if (data) {
       return data.map((item: any) => ({
-        id: String(item.id), // تحويل دائم لنص عشان يطابق الـ Frontend ولا يضرب مع الـ UUID
+        id: String(item.id),
         title: item.title,
         author: item.author,
         description: item.description || "",
-        pdfUrl: item.pdf_url || item.pdfUrl || "", // القراءة التلقائية من العمود القياسي المعتمد
+        pdfUrl: item.pdf_url || item.pdfUrl || "",
         coverUrl: item.cover_url || item.coverUrl || "",
         isCustom: item.is_custom !== undefined ? item.is_custom : true,
+        // تحويل التاريخ القادم من timestamptz إلى رقم ليطابق الفروينت إند
         addedAt: item.added_at ? new Date(item.added_at).getTime() : Date.now(),
         category: item.category || "general",
       }));
@@ -57,14 +58,12 @@ export async function insertSupabaseBook(book: Book): Promise<Book | null> {
       title: book.title,
       author: book.author,
       description: book.description,
-      pdf_url: book.pdfUrl, // الربط بالعمود القياسي المعتمد في السيرفر لتجنب خطأ الـ Cache
-      cover_url: book.coverUrl || "",
-      is_custom: book.isCustom,
-      added_at: book.addedAt || Date.now(),
+      pdf_url: book.pdfUrl, // مطابق لجدولك الحالي
       category: book.category || "general",
+      // الحسم هنا: تحويل الرقم إلى صيغة ISO String متوافقة تماماً مع timestamptz في سوبابيس
+      added_at: new Date(book.addedAt || Date.now()).toISOString(),
     };
 
-    // فحص المعرف: لو كان UUID نرسله، لو كان نص افتراضي نترك سوبابيس تولده تلقائياً
     const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(book.id);
     if (isUuid) {
       insertData.id = book.id;
@@ -120,7 +119,6 @@ export async function updateSupabaseBook(book: Book): Promise<boolean> {
         author: book.author,
         description: book.description,
         pdf_url: book.pdfUrl,
-        cover_url: book.coverUrl || "",
         category: book.category || "general",
       })
       .eq("id", book.id);
