@@ -1,15 +1,11 @@
 {
   "rewrites": [
     {
-      "source": "/api/proxy-pdf",
-      "destination": "https://docs.google.com/uc?export=download"
+      "source": "/api/:path*",
+      "destination": "/api/:path*"
     },
     {
-      "source": "/api/drive-proxy",
-      "destination": "https://docs.google.com/uc"
-    },
-    {
-      "source": "/(.*)",
+      "source": "/((?!api/).*)",
       "destination": "/index.html"
     }
   ]
