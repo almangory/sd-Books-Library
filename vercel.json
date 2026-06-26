@@ -1,0 +1,12 @@
+{
+  "rewrites": [
+    {
+      "source": "/api/drive-proxy",
+      "destination": "https://docs.google.com/uc"
+    },
+    {
+      "source": "/(.*)",
+      "destination": "/index.html"
+    }
+  ]
+}
