@@ -1,6 +1,6 @@
 /**
  * Helper to parse Google Drive URLs and convert them into direct download/stream URLs.
- * تم تعديلها لتخطي حماية CORS وفتح المخطوطات والكتب مباشرة في القارئ التفاعلي
+ * تم تحويل المسار ليمر عبر البروكسي المحلي لتخطي حماية CORS نهائياً داخل AI Studio و Vercel
  */
 export function getGoogleDriveDirectLink(url: string): string {
   if (!url) return "";
@@ -25,8 +25,8 @@ export function getGoogleDriveDirectLink(url: string): string {
   }
   
   if (fileId) {
-    // الحسم هنا: إرجاع الرابط المباشر والنظيف المعتمد للبث والتحميل السريع في المتصفح
-    return `https://docs.google.com/uc?export=download&id=${fileId}`;
+    // التعديل الحاسم: توجيه الطلب إلى البروكسي الداخلي المفرمل في vite.config.ts
+    return `/api/drive-proxy?export=download&id=${fileId}`;
   }
   
   return trimmed;
