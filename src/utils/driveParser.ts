@@ -1,5 +1,6 @@
 /**
  * Helper to parse Google Drive URLs and convert them into direct download/stream URLs.
+ * تم تعديلها لتخطي حماية CORS وفتح المخطوطات والكتب مباشرة في القارئ التفاعلي
  */
 export function getGoogleDriveDirectLink(url: string): string {
   if (!url) return "";
@@ -8,9 +9,6 @@ export function getGoogleDriveDirectLink(url: string): string {
   const trimmed = url.trim();
   
   // Match file ID from various formats
-  // Format 1: https://drive.google.com/file/d/{FILE_ID}/view...
-  // Format 2: https://drive.google.com/open?id={FILE_ID}
-  // Format 3: google drive short links or doc links
   const fileIdRegexes = [
     /\/file\/d\/([a-zA-Z0-9_-]+)/,
     /id=([a-zA-Z0-9_-]+)/,
@@ -27,8 +25,8 @@ export function getGoogleDriveDirectLink(url: string): string {
   }
   
   if (fileId) {
-    // Return standard, clean shareable Google Drive link to store in database
-    return `https://drive.google.com/file/d/${fileId}/view`;
+    // الحسم هنا: إرجاع الرابط المباشر والنظيف المعتمد للبث والتحميل السريع في المتصفح
+    return `https://docs.google.com/uc?export=download&id=${fileId}`;
   }
   
   return trimmed;
