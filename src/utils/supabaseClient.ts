@@ -1,7 +1,7 @@
 import { createClient } from "@supabase/supabase-js";
 import { Book } from "../types";
 
-// ⚠️ استبدل هافين السطرين بروابط مشروعك الحقيقية من إعدادات Supabase (Project Settings -> API):
+// روابط مشروعك الحقيقية تم الحفاظ عليها وتفعيلها بالكامل
 const supabaseUrl = "https://jzztpvefyqqyewiygdaa.supabase.co".trim();
 const supabaseAnonKey = "sb_publishable_8T3dT2NJqcSHX0FkG0K6eg_IknNAY2b".trim();
 
@@ -33,8 +33,8 @@ export async function getSupabaseBooks(): Promise<Book[] | null> {
         title: item.title,
         author: item.author,
         description: item.description || "",
-        pdfUrl: item.google_drive_url || item.pdfUrl || "", // القراءة من عمود google_drive_url الخاص بك
-        coverUrl: item.cover_url || "",
+        pdfUrl: item.pdf_url || item.pdfUrl || "", // القراءة التلقائية من العمود القياسي المعتمد
+        coverUrl: item.cover_url || item.coverUrl || "",
         isCustom: item.is_custom !== undefined ? item.is_custom : true,
         addedAt: item.added_at ? new Date(item.added_at).getTime() : Date.now(),
         category: item.category || "general",
@@ -57,7 +57,10 @@ export async function insertSupabaseBook(book: Book): Promise<Book | null> {
       title: book.title,
       author: book.author,
       description: book.description,
-      google_drive_url: book.pdfUrl, // حفظ الرابط في عمودك المخصص بنجاح
+      pdf_url: book.pdfUrl, // الربط بالعمود القياسي المعتمد في السيرفر لتجنب خطأ الـ Cache
+      cover_url: book.coverUrl || "",
+      is_custom: book.isCustom,
+      added_at: book.addedAt || Date.now(),
       category: book.category || "general",
     };
 
@@ -84,7 +87,7 @@ export async function insertSupabaseBook(book: Book): Promise<Book | null> {
         title: data.title,
         author: data.author,
         description: data.description || "",
-        pdfUrl: data.google_drive_url,
+        pdfUrl: data.pdf_url,
         coverUrl: data.cover_url || "",
         isCustom: true,
         addedAt: data.added_at ? new Date(data.added_at).getTime() : Date.now(),
@@ -116,7 +119,8 @@ export async function updateSupabaseBook(book: Book): Promise<boolean> {
         title: book.title,
         author: book.author,
         description: book.description,
-        google_drive_url: book.pdfUrl,
+        pdf_url: book.pdfUrl,
+        cover_url: book.coverUrl || "",
         category: book.category || "general",
       })
       .eq("id", book.id);
