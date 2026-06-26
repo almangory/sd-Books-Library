@@ -140,10 +140,27 @@ export default function App() {
           const supabaseBooks = await getSupabaseBooks();
           if (supabaseBooks) {
             setBooks(prev => {
-              // Merge books: keep default books, and overlay with books fetched from Supabase
-              const dbIds = new Set(supabaseBooks.map(b => b.id));
-              const filteredDefaults = DEFAULT_BOOKS.filter(b => !dbIds.has(b.id));
-              return [...supabaseBooks, ...filteredDefaults];
+              // Start with all books fetched from Supabase
+              const merged = [...supabaseBooks];
+              const mergedIds = new Set(merged.map(b => b.id));
+              
+              // Keep any local custom books that aren't already fetched from Supabase
+              prev.forEach(b => {
+                if (b.isCustom && !mergedIds.has(b.id)) {
+                  merged.push(b);
+                  mergedIds.add(b.id);
+                }
+              });
+              
+              // Ensure all default books are included
+              DEFAULT_BOOKS.forEach(b => {
+                if (!mergedIds.has(b.id)) {
+                  merged.push(b);
+                  mergedIds.add(b.id);
+                }
+              });
+              
+              return merged;
             });
           }
         }
@@ -225,7 +242,10 @@ export default function App() {
     try {
       const { insertSupabaseBook, isSupabaseConfigured } = await import("./utils/supabaseClient");
       if (isSupabaseConfigured) {
-        await insertSupabaseBook(newBook);
+        const savedBook = await insertSupabaseBook(newBook);
+        if (savedBook) {
+          setBooks(prev => prev.map(b => b.id === newBook.id ? savedBook : b));
+        }
       }
     } catch (err) {
       console.error("Failed to insert book to Supabase:", err);

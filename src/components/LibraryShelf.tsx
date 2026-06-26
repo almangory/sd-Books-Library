@@ -151,7 +151,17 @@ export default function LibraryShelf({
       setEditingBook(book);
       setEditTitle(book.title);
       setEditAuthor(book.author);
-      setEditUrl(book.pdfUrl);
+      
+      // Map internal proxy URL back to clean Google Drive URL for elegant presentation
+      let displayUrl = book.pdfUrl;
+      if (displayUrl.startsWith("/api/proxy-pdf?id=")) {
+        const fileId = displayUrl.split("?id=")[1];
+        if (fileId) {
+          displayUrl = `https://drive.google.com/file/d/${fileId}/view?usp=sharing`;
+        }
+      }
+      setEditUrl(displayUrl);
+      
       setEditDesc(book.description || "");
       setEditCategory(book.category || "general");
       setShowEditModal(true);

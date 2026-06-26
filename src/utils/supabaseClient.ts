@@ -49,29 +49,45 @@ export async function getSupabaseBooks(): Promise<Book[] | null> {
 /**
  * Insert a book into Supabase
  */
-export async function insertSupabaseBook(book: Book): Promise<boolean> {
-  if (!supabase) return false;
+export async function insertSupabaseBook(book: Book): Promise<Book | null> {
+  if (!supabase) return null;
   try {
-    const { error } = await supabase.from("books").insert([
-      {
-        id: book.id.startsWith("drive_") ? undefined : book.id, // let Supabase auto-generate uuid if it's drive_ random
-        title: book.title,
-        author: book.author,
-        description: book.description,
-        google_drive_url: book.pdfUrl,
-        category: book.category || "general",
-        is_custom: true,
-      },
-    ]);
+    const { data, error } = await supabase
+      .from("books")
+      .insert([
+        {
+          title: book.title,
+          author: book.author,
+          description: book.description,
+          google_drive_url: book.pdfUrl,
+          category: book.category || "general",
+        },
+      ])
+      .select()
+      .single();
 
     if (error) {
       console.error("Error inserting book to Supabase:", error);
-      return false;
+      return null;
     }
-    return true;
+
+    if (data) {
+      return {
+        id: data.id,
+        title: data.title,
+        author: data.author,
+        description: data.description || "",
+        pdfUrl: data.google_drive_url,
+        coverUrl: data.cover_url || "",
+        isCustom: true,
+        addedAt: data.added_at ? new Date(data.added_at).getTime() : Date.now(),
+        category: data.category || "general",
+      };
+    }
+    return null;
   } catch (err) {
     console.error("Supabase insert failure:", err);
-    return false;
+    return null;
   }
 }
 
