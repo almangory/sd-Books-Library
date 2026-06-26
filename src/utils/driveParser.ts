@@ -25,8 +25,8 @@ export function getGoogleDriveDirectLink(url: string): string {
   }
   
   if (fileId) {
-    // الحسم هنا: إرجاع رابط المعاينة المباشر، وهو الرابط الأضمن لتخطي جدار الـ CORS وحظر التحميل
-    return `https://drive.google.com/file/d/${fileId}/preview`;
+    // إرجاع رابط البروكسي المحلي والآمن لتخطي حماية CORS نهائياً وتحميل الـ PDF مباشرة للقارئ التفاعلي
+    return `/api/proxy-pdf?id=${fileId}`;
   }
   
   return trimmed;

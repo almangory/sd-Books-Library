@@ -24,6 +24,7 @@ import { motion, AnimatePresence } from "motion/react";
 import * as pdfjsLib from "pdfjs-dist";
 // @ts-ignore
 import { getGoogleDriveDirectLink } from "../utils/driveParser";
+// @ts-ignore
 import pdfjsWorkerCode from "pdfjs-dist/build/pdf.worker.min.mjs?raw";
 
 // Create a safe, offline-capable, same-origin Blob URL from the raw worker code.
@@ -431,12 +432,31 @@ export default function ThreeDFlipbook({
 
         // If pdfSource is the local backend proxy, try it first. If it fails, fallback to CORS bypass.
         if (typeof pdfSource === "string" && pdfSource.startsWith("/api/proxy-pdf")) {
-          const fileId = pdfSource.split("?id=")[1];
+          let fileId = "";
+          try {
+            const urlObj = new URL(pdfSource, window.location.origin);
+            fileId = urlObj.searchParams.get("id") || "";
+          } catch (e) {
+            fileId = pdfSource.split("?id=")[1] || "";
+            if (fileId.includes("&")) {
+              fileId = fileId.split("&")[0];
+            }
+          }
+
           try {
             console.log("Attempting to load PDF via local Express proxy:", pdfSource);
             const proxyResponse = await fetch(pdfSource);
             if (proxyResponse.ok) {
+              const contentType = proxyResponse.headers.get("content-type") || "";
+              if (contentType.includes("text/html")) {
+                throw new Error("Received HTML content (such as virus warning or login screen) instead of PDF.");
+              }
               const arrayBuffer = await proxyResponse.arrayBuffer();
+              const firstBytes = new Uint8Array(arrayBuffer.slice(0, 4));
+              // Check if it's HTML (starts with '<' which is 60 in ASCII)
+              if (firstBytes[0] === 60) {
+                throw new Error("Received HTML document instead of PDF binary.");
+              }
               loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
             } else {
               throw new Error(`Proxy status: ${proxyResponse.status}`);
