@@ -6,8 +6,6 @@ import SupabaseRequirements from "./components/SupabaseRequirements";
 import { LogOut, X, AlertCircle } from "lucide-react";
 
 // Curated default books representing traditional Sudanese literature, history, and education.
-// These point to extremely fast and reliable sample PDFs to allow the interactive book flipping to work instantly for testing, 
-// while fully supporting user custom URLs and local drag-and-drop PDFs!
 const DEFAULT_BOOKS: Book[] = [
   {
     id: "def_1",
@@ -100,19 +98,15 @@ const DEFAULT_BOOKS: Book[] = [
 ];
 
 export default function App() {
-  // Application View: shelf (Library shelf), reader (Active Book Viewer), supabase (Supabase DDL SQL setup view)
   const [view, setView] = useState<"shelf" | "reader" | "supabase">("shelf");
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
   
-  // Admin Mode state
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
     return sessionStorage.getItem("flipbook_is_admin") === "true";
   });
   
-  // Administrator Password - loaded dynamically from Supabase or defaults to '20302060'
   const [adminPassword, setAdminPassword] = useState<string>("20302060");
 
-  // Persisted books state (Default + Custom uploaded or linked books)
   const [books, setBooks] = useState<Book[]>(() => {
     const saved = localStorage.getItem("flipbook_persisted_books_v1");
     if (saved) {
@@ -131,17 +125,32 @@ export default function App() {
       try {
         const { getAdminPassword, getSupabaseBooks, isSupabaseConfigured } = await import("./utils/supabaseClient");
         
-        // 1. Load password
-        const pass = await getAdminPassword();
-        setAdminPassword(pass);
+        // 1. Load password safely
+        if (typeof getAdminPassword === "function") {
+          const pass = await getAdminPassword();
+          if (pass) setAdminPassword(pass);
+        }
         
         // 2. Load books if configured
-        if (isSupabaseConfigured) {
+        if (isSupabaseConfigured && typeof getSupabaseBooks === "function") {
           const supabaseBooks = await getSupabaseBooks();
-          if (supabaseBooks) {
+          
+          if (supabaseBooks && Array.isArray(supabaseBooks)) {
+            // Mapping incoming database fields to support both snake_case and camelCase safely
+            const formattedBooks: Book[] = supabaseBooks.map((b: any) => ({
+              id: b.id,
+              title: b.title,
+              author: b.author,
+              description: b.description || "",
+              pdfUrl: b.pdfUrl || b.pdf_url || "",
+              coverUrl: b.coverUrl || b.cover_url || "",
+              isCustom: b.isCustom !== undefined ? b.isCustom : true,
+              addedAt: b.addedAt || b.added_at || Date.now(),
+              category: b.category || "general"
+            }));
+
             setBooks(prev => {
-              // Start with all books fetched from Supabase
-              const merged = [...supabaseBooks];
+              const merged = [...formattedBooks];
               const mergedIds = new Set(merged.map(b => b.id));
               
               // Keep any local custom books that aren't already fetched from Supabase
@@ -165,7 +174,7 @@ export default function App() {
           }
         }
       } catch (err) {
-        console.error("Failed to load Supabase configurations:", err);
+        console.error("خطأ حرج أثناء جلب إعدادات وبينات Supabase:", err);
       }
     }
     initSupabaseData();
@@ -173,7 +182,9 @@ export default function App() {
 
   // Persist books changes to local storage as fallback
   useEffect(() => {
-    localStorage.setItem("flipbook_persisted_books_v1", JSON.stringify(books));
+    if (books && books.length > 0) {
+      localStorage.setItem("flipbook_persisted_books_v1", JSON.stringify(books));
+    }
   }, [books]);
 
   // Global settings
@@ -183,7 +194,7 @@ export default function App() {
       try {
         return JSON.parse(saved);
       } catch (e) {
-        // default settings
+        // Fallback below
       }
     }
     return {
@@ -199,11 +210,9 @@ export default function App() {
     localStorage.setItem("flipbook_settings", JSON.stringify(settings));
   }, [settings]);
 
-  // Protect content: Disable right-click, context menu, and image dragging
+  // Protect content
   useEffect(() => {
-    const handleContextMenu = (e: MouseEvent) => {
-      e.preventDefault();
-    };
+    const handleContextMenu = (e: MouseEvent) => e.preventDefault();
     const handleDragStart = (e: DragEvent) => {
       if ((e.target as HTMLElement).tagName === "IMG") {
         e.preventDefault();
@@ -217,10 +226,8 @@ export default function App() {
     };
   }, []);
 
-  // App Exit confirmation modal state
   const [showExitConfirm, setShowExitConfirm] = useState<boolean>(false);
 
-  // Authenticate Admin
   const handleAdminLogin = (passwordEntered: string): boolean => {
     if (passwordEntered === adminPassword) {
       setIsAdmin(true);
@@ -230,129 +237,99 @@ export default function App() {
     return false;
   };
 
-  // Logout Admin
   const handleAdminLogout = () => {
     setIsAdmin(false);
     sessionStorage.removeItem("flipbook_is_admin");
   };
 
-  // Add Book to personal collection & Supabase
   const handleAddBook = async (newBook: Book) => {
     setBooks(prev => [newBook, ...prev]);
     try {
       const { insertSupabaseBook, isSupabaseConfigured } = await import("./utils/supabaseClient");
-      if (isSupabaseConfigured) {
+      if (isSupabaseConfigured && typeof insertSupabaseBook === "function") {
         const savedBook = await insertSupabaseBook(newBook);
         if (savedBook) {
           setBooks(prev => prev.map(b => b.id === newBook.id ? savedBook : b));
         }
       }
     } catch (err) {
-      console.error("Failed to insert book to Supabase:", err);
+      console.error("فشل إدخال الكتاب في سوبابيس، تم الحفظ محلياً فقط:", err);
     }
   };
 
-  // Update Book details (title, author, url, description, category) & Supabase
   const handleUpdateBook = async (updatedBook: Book) => {
     setBooks(prev => prev.map(b => b.id === updatedBook.id ? updatedBook : b));
     try {
       const { updateSupabaseBook, isSupabaseConfigured } = await import("./utils/supabaseClient");
-      if (isSupabaseConfigured) {
+      if (isSupabaseConfigured && typeof updateSupabaseBook === "function") {
         await updateSupabaseBook(updatedBook);
       }
     } catch (err) {
-      console.error("Failed to update book in Supabase:", err);
+      console.error("فشل تعديل الكتاب في سوبابيس:", err);
     }
   };
 
-  // Delete Book from personal collection, remove cached blob, and delete in Supabase
   const handleDeleteBook = async (id: string) => {
     setBooks(prev => prev.filter(b => b.id !== id));
     
-    // Attempt cleaning blob cache in IndexedDB
     try {
       const { removeCachedBookBlob } = await import("./utils/indexedDB");
-      await removeCachedBookBlob(id);
+      if (typeof removeCachedBookBlob === "function") {
+        await removeCachedBookBlob(id);
+      }
     } catch (e) {
-      console.warn("IndexDB clean error:", e);
+      console.warn("IndexedDB clean error:", e);
     }
 
-    // Delete in Supabase
     try {
       const { deleteSupabaseBook, isSupabaseConfigured } = await import("./utils/supabaseClient");
-      if (isSupabaseConfigured) {
+      if (isSupabaseConfigured && typeof deleteSupabaseBook === "function") {
         await deleteSupabaseBook(id);
       }
     } catch (err) {
-      console.error("Failed to delete book from Supabase:", err);
+      console.error("فشل حذف الكتاب من سوبابيس:", err);
     }
   };
 
-  // Handle mobile Back Button or general screen-back logic
   const handleBackToLibrary = () => {
-    // Return to main shelf instead of exiting program
     setView("shelf");
     setSelectedBook(null);
-    
-    // Restore normal screen focus
     setSettings(prev => ({ ...prev, readingMode: false }));
   };
 
-  // Select Book to open in interactive reader
   const handleSelectBook = async (book: Book) => {
     try {
-      // Check if we have a cached local blob for this book (offline capability)
       const { getCachedBookBlob } = await import("./utils/indexedDB");
-      const cachedBlob = await getCachedBookBlob(book.id);
-      
-      if (cachedBlob) {
-        // Revoke previous session URL if applicable to avoid leaks
-        if (selectedBook && selectedBook.pdfUrl.startsWith("blob:")) {
-          URL.revokeObjectURL(selectedBook.pdfUrl);
+      if (typeof getCachedBookBlob === "function") {
+        const cachedBlob = await getCachedBookBlob(book.id);
+        if (cachedBlob) {
+          if (selectedBook && selectedBook.pdfUrl.startsWith("blob:")) {
+            URL.revokeObjectURL(selectedBook.pdfUrl);
+          }
+          const freshBlobUrl = URL.createObjectURL(cachedBlob);
+          setSelectedBook({ ...book, pdfUrl: freshBlobUrl });
+          setView("reader");
+          return;
         }
-        
-        // Re-generate fresh blob url for this viewing session
-        const freshBlobUrl = URL.createObjectURL(cachedBlob);
-        setSelectedBook({
-          ...book,
-          pdfUrl: freshBlobUrl
-        });
-      } else {
-        setSelectedBook(book);
       }
     } catch (e) {
-      console.warn("Could not check local cached blob, fallback to original url", e);
-      setSelectedBook(book);
+      console.warn("خطأ في قراءة الـ Blob المحلي، سيتم التشغيل عبر الرابط المباشر", e);
     }
     
+    setSelectedBook(book);
     setView("reader");
-  };
-
-  // Exit trigger action
-  const handleExitApp = () => {
-    setShowExitConfirm(true);
-  };
-
-  const handleConfirmExit = () => {
-    setShowExitConfirm(false);
-    // Standard visual feedback indicating exit success
-    alert("تم الخروج الآمن من نظام قارئ التقليب الورقي. يمكنك غلق علامة التبويب بأمان. مع تمنياتنا لك بأسعد الأوقات في القراءة!");
   };
 
   return (
     <div className={`min-h-screen transition-colors duration-500 ${
-      settings.darkMode 
-        ? "bg-[#1E1916] text-[#EADDC9]" 
-        : "bg-[#FDFBF7] text-[#4A3B32]"
+      settings.darkMode ? "bg-[#1E1916] text-[#EADDC9]" : "bg-[#FDFBF7] text-[#4A3B32]"
     }`}>
       
-      {/* Tiny subtle top bar with exit action (Only visible when not in immersive reading mode) */}
       {!settings.readingMode && view === "shelf" && (
         <div className="bg-[#4A3B32] text-[#FAF6EE] text-xs px-4 py-2 flex justify-between items-center shadow-sm">
           <button
-            onClick={handleExitApp}
+            onClick={() => setShowExitConfirm(true)}
             className="flex items-center gap-1 hover:text-red-300 transition-all font-semibold"
-            title="مغادرة البرنامج"
           >
             <LogOut className="w-3.5 h-3.5" />
             <span>خروج من البرنامج</span>
@@ -365,7 +342,6 @@ export default function App() {
         </div>
       )}
 
-      {/* CORE VIEW ROUTER */}
       {view === "shelf" && (
         <LibraryShelf 
           books={books}
@@ -391,43 +367,39 @@ export default function App() {
       )}
 
       {view === "supabase" && (
-        <SupabaseRequirements 
-          onBack={() => setView("shelf")}
-        />
+        <SupabaseRequirements onBack={() => setView("shelf")} />
       )}
 
-      {/* 5. ELEGANT DESIGNED EXIT CONFIRMATION DIALOG MODAL */}
       {showExitConfirm && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
           <div className="w-full max-w-sm p-6 rounded-2xl bg-[#FDFBF7] border border-[#E6E0D4] shadow-2xl text-right">
-            
             <div className="flex items-center gap-3 justify-end text-amber-700 mb-3">
               <span className="font-serif font-bold text-md">هل تود مغادرة مكتبتك الرقمية؟</span>
               <AlertCircle className="w-6 h-6 text-[#9E4233]" />
             </div>
-
             <p className="text-xs text-[#6D4C41] leading-relaxed mb-6">
-              بمغادرتك التطبيق، ستفقد إمكانية مواصلة القراءة السريعة لصفحتك المفتوحة حالياً، على الرغم من أن إشاراتك المرجعية وهوامشك المكتوبة ستبقى محفوظة بأمان في ذاكرة متصفحك وسجلات سوبابيس للزيارة القادمة!
+              بمغادرتك التطبيق، ستفقد إمكانية مواصلة القراءة السريعة لصفحتك المفتوحة حالياً.
             </p>
-
             <div className="flex gap-3">
               <button
                 onClick={() => setShowExitConfirm(false)}
-                className="flex-1 py-2.5 rounded-xl border border-neutral-300 hover:bg-neutral-100 text-xs font-bold text-neutral-600 transition-colors"
+                className="flex-1 py-2.5 rounded-xl border border-neutral-300 hover:bg-neutral-100 text-xs font-bold text-neutral-600"
               >
-                لا، تراجع (مواصلة القراءة)
+                تراجع
               </button>
               <button
-                onClick={handleConfirmExit}
-                className="flex-1 py-2.5 rounded-xl bg-[#9E4233] hover:bg-[#853225] text-xs font-bold text-white transition-colors"
+                onClick={() => {
+                  setShowExitConfirm(false);
+                  alert("تم الخروج الآمن.");
+                }}
+                className="flex-1 py-2.5 rounded-xl bg-[#9E4233] hover:bg-[#853225] text-xs font-bold text-white"
               >
-                نعم، متأكد من المغادرة
+                مغادرة
               </button>
             </div>
           </div>
         </div>
       )}
-
     </div>
   );
 }
