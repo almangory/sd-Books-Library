@@ -18,7 +18,15 @@ import {
   Volume2,
   VolumeX,
   Download,
-  AlertTriangle
+  AlertTriangle,
+  Maximize,
+  Minimize,
+  Play,
+  Pause,
+  Headphones,
+  Loader2,
+  Settings,
+  Globe
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import * as pdfjsLib from "pdfjs-dist";
@@ -199,6 +207,231 @@ export default function ThreeDFlipbook({
   // Audio state
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
 
+  // Fullscreen state
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
+  const toggleFullscreen = () => {
+    try {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch((err) => {
+          console.warn("Fullscreen permission denied or blocked:", err);
+        });
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    } catch (err) {
+      console.warn("Fullscreen API is not supported in this environment:", err);
+    }
+  };
+
+  // Text-to-Speech (TTS) States
+  const [isSpeaking, setIsSpeaking] = useState<boolean>(false);
+  const [isExtractingText, setIsExtractingText] = useState<boolean>(false);
+  const [ttsSpeed, setTtsSpeed] = useState<number>(0.9);
+  const [ttsLang, setTtsLang] = useState<string>("auto");
+  const [showTtsSettings, setShowTtsSettings] = useState<boolean>(false);
+
+  // Stop speech synthesis on component unmount or book change
+  useEffect(() => {
+    return () => {
+      if (typeof window !== "undefined" && window.speechSynthesis) {
+        window.speechSynthesis.cancel();
+      }
+    };
+  }, [book.id]);
+
+  const speakText = (text: string) => {
+    if (typeof window === "undefined" || !window.speechSynthesis) return;
+
+    window.speechSynthesis.cancel();
+
+    const utterance = new SpeechSynthesisUtterance(text);
+    
+    // Arabic characters detection regex
+    const isArabic = /[\u0600-\u06FF]/.test(text);
+    
+    let targetLang = ttsLang;
+    if (targetLang === "auto") {
+      targetLang = isArabic ? "ar-SA" : "en-US";
+    }
+
+    utterance.lang = targetLang;
+    utterance.rate = ttsSpeed;
+
+    // Set matching voice if possible
+    const voices = window.speechSynthesis.getVoices();
+    const voice = voices.find(v => v.lang.startsWith(targetLang.split("-")[0]));
+    if (voice) {
+      utterance.voice = voice;
+    }
+
+    utterance.onend = () => {
+      setIsSpeaking(false);
+    };
+
+    utterance.onerror = () => {
+      setIsSpeaking(false);
+    };
+
+    setIsSpeaking(true);
+    window.speechSynthesis.speak(utterance);
+  };
+
+  const getArabicBookPageText = (bookId: string, pageNum: number): string => {
+    const isDef1 = bookId === "def_1" || book.title.includes("الهجرة") || book.title.includes("موسم");
+    const isDef2 = bookId === "def_2" || book.title.includes("كوش") || book.title.includes("حضارة");
+    const isDef3 = bookId === "def_3" || book.title.includes("ديوان") || book.title.includes("الشعر");
+    const isDef4 = bookId === "def_4" || book.title.includes("الأمثال") || book.title.includes("الفولكلور");
+
+    if (isDef1) {
+      const chapters = [
+        `غلاف رواية موسم الهجرة إلى الشمال، للكاتب الروائي السوداني العالمي الطيب صالح. تحفة الأدب العربي الحديث.`,
+        `العودة إلى الوطن والأهل. عدت إلى أهلي يا سادتي بعد سبعة أعوام قضيتها في أوروبا... كان ذلك في مساء دافئ من مساوئ النيل العظيم، حيث تفوح رائحة الأرض الطيبة والتربة المبتلة بالماء الهادئ، وشعرت أنني لست ريشة في مهب الريح، بل شجرة وارفة تضرب بجذورها في أعماق التربة الطينية الخصبة لبلدي العزيز.`,
+        `لغز مصطفى سعيد ومجلس السمر. كان مصطفى سعيد رجلاً صامتاً يحمل في عينيه لغزاً غامضاً وهو يمشى في طرقات القرية بهدوء وجاذبية غريبة. وتحت ظلال النخيل الوارفة ومجلس السمر الدافئ، كان يتحدث بنبرة منسابة كالمياه الهادئة، يحمل في طياتها أسراراً دفينة وعواصف قادمة من صخب ليالي لندن الباردة وتأثيرها على حياته.`,
+        `صراع الهوية والذات الكولونيالية. يتأمل الراوي في هويته ويتساءل: هل أنا مصطفى سعيد؟ أم أنني نبتة صالحة نمت في هذه الأرض الطيبة وارتوت من فيضان النيل؟ إن الصراع الأزلي بين برودة الشمال الكولونيالي الأوروبي ودفء الجنوب الإفريقي الخصيب يتجلى في أعمق صور الصدام الحضاري وجدلية الشرق والغرب الممتدة في عروق الأجيال.`,
+        `الغرفة السرية وميراث الندم الإنجليزي. غرفة غامضة مغلقة في قلب القرية السودانية، مبنية بالآجر الأحمر، تحوي مئات الكتب باللغة الإنجليزية، ودافئة بموقد حطب كأنها في لندن، مع صور تذكارية وشواهد قديمة. إنها بقعة غريبة مستقطعة من بريطانيا ومثبتة بعناية فائقة في وسط الصحراء الإفريقية الحارة لتكون شاهداً على ازدواجية مروعة.`,
+        `جريان النيل الخالد وصدى الأصوات القديمة للأسلاف والأجداد. إن النيل يجري صامتاً مهيباً، لا يبالي بمسرحياتنا البشرية المؤقتة ولا صراعاتنا الصغيرة وعواطفنا العابرة. وعلى ضفافه الخضراء ننسج قصص الحب والموت والرحيل، بينما تتردد أصوات السواقي القديمة منشدة ترانيم الصبر والبقاء والولادة المتجددة في كل موسم.`,
+        `تحت سموات الصحراء والنجوم الصافية المتلألئة. عند الجلوس ليلاً في الصحراء المترامية الأطراف، تلمع النجوم مثل جمرات بيضاء متوهجة مرصعة في سقف السماء المخملية الداكنة. هدوء الكون يبعث الطمأنينة في النفس، شاهداً على عظمة الخالق وكفاح الإنسان السوداني الأبيّ في مجابهة صعاب الطبيعة وصنع المعجزات بصمت وكبرياء.`,
+        `خاتمة الرواية: صرخة بطل الرواية في وسط النيل طالباً الحياة والنجاة. تتصاعد وتيرة الأحداث حتى يجد البطل نفسه يسبح في النهر بين الحياة والموت، في صراع مرير مع التيار الجارف. ويصرخ صرخته التاريخية المدوية: "الحياة! الحياة!" مقرراً أن يسبح بقوة نحو الضفة الأخرى، واضعاً حداً لرحلة التيه الطويلة ليعيش ويصنع مصيره بيديه.`
+      ];
+      return chapters[pageNum - 1] || "مزيد من الفصول الأدبية العميقة في رواية موسم الهجرة إلى الشمال للطيب صالح.";
+    } else if (isDef2) {
+      const chapters = [
+        `غلاف كتاب حضارة كوش العريقة، مهد الفراعنة السود وسلالة النوبة العظيمة في شمال السودان.`,
+        `مهد الفراعنة السود وسلالة النوبة. نشأت مملكة كوش العظيمة وازدهرت في منطقة النيل الأوسط، مشكلة قوة عسكرية وحضارية عظمى نافست الإمبراطورية المصرية القديمة بل وحكمت وادي النيل بأكمله لقرون طويلة من خلال الفراعنة الكوشيين السود الذين شيّدوا عهداً من الاستقرار والقوة والنهضة العمرانية.`,
+        `أهرامات مروي وتشييد الآثار الخالدة. تقف أهرامات مروي بشموخ وجلال في الرمال الذهبية اللامعة بمنطقة البجراوية. هذه الأهرامات الفريدة التي يتجاوز عددها المائتين تتميز بزواياها الحادة الضيقة وتصميمها الهندسي البديع، شاهدة على مهارة البنائين والمصممين الكوشيين وعقيدتهم الخالدة في الحياة والبعث والخلود.`,
+        `الكنداكات، ملكات المحاربين العظماء في كوش القديمة. كنداكات كوش كنّ رمزاً حياً للقوة والشرف والقيادة الحكيمة، حيث حكمن البلاد وقدن الجيوش بأنفسهن لمجابهة الغزو وحماية الحدود، مثل الكنداكة أماني ريناس التي تصدت للغزو الروماني بكل شجاعة وبسالة، لتخلد اسمها كرمز للصمود والسيادة الإفريقية الدائمة.`,
+        `صناعة الحديد والتجارة في مروي القديمة. عرفت مروي في العصور القديمة بلقب "برمنغهام إفريقيا القديمة" نظراً لازدهار أفران صهر الحديد الكبرى بها وتصدير الأدوات والأسلحة المتطورة لكافة أنحاء القارة والشرق الأدنى، مما شكل ركيزة اقتصادية وصناعية هائلة مكنت المملكة الكوشية من الازدهار والتطور لقرون طويلة.`,
+        `المدينة الملكية المقدسة ومعابد النقعة البديعة. معابد النقعة والمصورات الصفراء تجسد أرقى مستويات الفنون الكوشية، حيث يبرز معبد الأسد المخصص للإله المحارب أبادماك بنقوشه الغائرة وتماثيله المهيبة التي تمزج بتناغم ساحر بين الرموز الإفريقية المحلية، والتأثيرات الفرعونية المصرية، واللمسات الكلاسيكية الهلنسية واليونانية الرومانية.`,
+        `جبل البركل المقدس وموطن الآلهة الفرعونية. كان جبل البركل يُعتقد بأنه المسكن الروحي للإله آمون ومصدر منح شرعية الحكم للملوك الكوشيين والمصريين على حد سواء. ويضم الجبل في باطنه معابد منحوتة في الصخر وتماثيل ضخمة غاية في الإتقان، تشهد على عمق العقيدة الروحية والقداسة الدينية التي ربطت هذا الجبل بوادي النيل.`,
+        `الخاتمة: جهود حماية وتوثيق التراث السوداني القديم. يمثل الكشف المستمر عن آثار كوش ونفض الغبار عنها جهداً حيوياً لتوثيق الهوية الوطنية واستعادة فصول تاريخية مشرقة من تاريخ البشرية، لتظل أهرامات ومعابد السودان منارة تلهم الأجيال الحاضرة والمستقبلية بقيم العطاء والبناء والصمود الحضاري.`
+      ];
+      return chapters[pageNum - 1] || "مزيد من الفصول التاريخية والاستكشافات الأثرية لحضارة كوش النوبية العظيمة.";
+    } else if (isDef3) {
+      const chapters = [
+        `غلاف ديوان الشعر السوداني، عيون القصائد والأنشودة الخالدة للنيل والأرض والحرية والثورة الشعبية.`,
+        `القصيدة الأولى: أنشودة النيل والفيضان والأرض المعطاءة. يا نيل يا سليل الفراديس، يا من تغسل بأمواجك العذبة أحزان السنين وتروي نخيلنا الشامخ بالخير والنماء، تسري في عروقنا نغمة أزلية من الحب والوفاء للوطن المعطاء والأرض الخصبة التي تزهو بالأمل والثورة والجمال المتجدد.`,
+        `القصيدة الثانية: حنين ووجد إلى الخرطوم ملتقى النيلين. الخرطوم يا ملتقى النيلين، الأزرق الصاخب بالأشواق والأبيض الهادئ بالعهود، حيث تلتف غابات السنط والظل، ويفوح أريج التراب المبتل بدعاش المطر، وتلتقي القلوب والثقافات من أقصى الوطن لتصنع أنشودة السلام والتعايش والإخاء الإنساني الفريد.`,
+        `القصيدة الثالثة: كبرياء الصحراء وخصال الكرم والشهامة والفروسية. نحن أبناء الشمس الساطعة، والبادية الشاسعة، كرام النفوس، بيوتنا عامرة ترحب بالمسافر والغريب بغير منّ، وخصالنا منسوجة من الصدق والشهامة والمروءة التي نتوارثها جيلاً بعد جيل كتاج فخر نزين به هام القوافي والقصيد الشامخ.`,
+        `القصيدة الرابعة: همسات أشجار السنط والظل تحت الهجير الوارف. تحت أغصان السنط والطلح، وفي ظلال الهجير الحار، تولد معاني الصبر والتأمل والعشق البكر لبلاد النيل والخيرات، حيث تنطق الطبيعة بأبلغ العبر، وتحكي كل ورقة وشجرة قصة صبر إنسان هذه الأرض وسعيه الدؤوب نحو غد وارف بالسلام والعدالة والاستقرار.`,
+        `القصيدة الخامسة: مزمار الراعي في سهول كردفان الغناء وسحر الغروب البنفسجي. ينساب صوت مزمار الراعي هادئاً عذباً يعزف للوديان الشاسعة وسهول كردفان الغناء ومزارع الصمغ العربي، مردداً تباريك الأرض والطبيعة البكر وهي تتزين بوشاح الغروب البنفسجي الدافئ، في ترنيمة تعبر عن بساطة العيش وعمق السكينة الروحية.`,
+        `القصيدة السادسة: نشيد الحرية وكفاح الكلمة الثائرة ضد القيود والظلام. سطرت دماء الشعراء الأحرار فجر الخلاص وكتبت مجد الوطن بأحرف من نور متوهج لا ينطفئ. الكلمة الحرة رصاصة في صدر الطغيان ونور يضيء دروب الثائرين الساعين نحو الكرامة والحرية والعدالة الاجتماعية لتشرق شمس الوطن حرة أبية دون قيود.`,
+        `الخاتمة: شهادة فنية خالدة لروح السودان الشاعر والمعطاء. يظل الشعر هو ديوان السودانيين وسجل وجدانهم النابض بالجمال والثورة، ومرآة مشاعرهم وتطلعاتهم نحو غد أفضل وأجمل ترفرف فيه رايات الحب والسلام والحرية، وتظل القصيدة السودانية منارة للأدب والوجدان الإنساني النبيل الخالد.`
+      ];
+      return chapters[pageNum - 1] || "مزيد من عيون القصائد وروائع الشعر السوداني الكلاسيكي والحديث.";
+    } else if (isDef4) {
+      const chapters = [
+        `غلاف كتاب الأمثال السودانية وروائع الفولكلور الشعبي الأصيل للبروفيسور والتربوي الكبير بابكر بدري.`,
+        `المثل الأول: 'الجرح بالجرح والبلسم الوفاء الكاشف'. يعلمنا هذا المثل الشعبي أن النفوس الكريمة تتسامح ولكن الجروح العميقة تترك أثراً لا يمحى بسهولة، لذا يجب صون الود وحفظ لسان المرء وبلسمة جراح الآخرين بالكلمة الطيبة والوفاء الصادق لبناء مجتمع متماسك.`,
+        `المثل الثاني: 'إذا الغيم كتر وبشائر الخير والبركات القادمة'. يدل هذا المثل على التفاؤل واليقين بالفرج القريب، فعندما تتكاثف السحب والغيوم وتتجمع أسباب الخير والنجاح والمقدمات الإيجابية، تتبعها بشائر المطر والنتائج المفرحة والأرزاق الوفيرة حتماً، معززةً روح التكاتف والأمل في النفوس.`,
+        `المثل الثالث: 'الأخوات في السدة ومحك الشدائد والنوائب الصعبة'. يضرب هذا المثل البليغ لبيان أن معادن الناس والروابط الحقيقية والصلات الوثيقة تظهر بوضوح في أوقات الشدائد والأزمات والمحن الصعبة، وليس في أوقات الرخاء والسهولة، فالصديق الحقيقي والقريب المخلص هو من يقف معك في 'السدة'.`,
+        `المثل الرابع: 'الباب البيجيب الريح استريح وسدو'. دعوة حكيمة للغاية لتجنب المشاكل وإغلاق أبواب النزاعات والابتعاد عن مواطن الفتن والخصومات العقيمة التي تستهلك الطاقة بلا طائل، وهي وسيلة مجربة وذكية من الفولكلور لحفظ سلامة القلوب وعيش حياة هادئة هانئة ومستقرة.`,
+        `المثل الخامس: 'الأعور في وسط العميان ملك ونسبية القدرات البشرية'. يوضح هذا المثل الشعبي كيف أن المعرفة البسيطة والمهارة المحدودة قد تبدو عظيمة وهائلة في مجتمع يفتقر تماماً إليها، ويدعو للتواضع ومواصلة التعلم وعدم الغرور بالقدرات الذاتية المحدودة في بحار العلوم والمهارات الواسعة.`,
+        `المثل السادس: 'الكلام في شط النهر ساهل وميزان التجربة والأفعال الحية'. يعلمنا هذا المثل أن التنظير والقول وإبداء الآراء من موقع الأمان والحياد يختلف تماماً عن خوض غمار الصعاب والنزول لساحة العمل الفعلي ومواجهة الأمواج، فالفعل الحقيقي يزن أكثر من آلاف الكلمات والخطب الرنانة.`,
+        `الخاتمة: فكر البروفيسور بابكر بدري وأهمية التوثيق الشعبي لحفظ الهوية السودانية ونقل الحكمة والوعي المتوارث للأجيال الصاعدة لبناء غد متماسك وقوي.`
+      ];
+      return chapters[pageNum - 1] || "مزيد من الأمثال والحكم الشعبية وفولكلور الثقافة السودانية الأصيلة.";
+    }
+
+    return `الصفحة رقم ${pageNum} من كتاب "${book.title}" لمؤلفه "${book.author}".`;
+  };
+
+  const handleSpeakCurrentPage = async () => {
+    if (typeof window === "undefined" || !window.speechSynthesis) {
+      alert("عذراً، ميزة القراءة الصوتية (Text-to-Speech) غير مدعومة في متصفحك الحالي.");
+      return;
+    }
+
+    if (isSpeaking) {
+      window.speechSynthesis.cancel();
+      setIsSpeaking(false);
+      return;
+    }
+
+    const isPredefined = book.id.startsWith("def_") || ["def_1", "def_2", "def_3", "def_4"].includes(book.id) || book.id === "1" || book.id === "2" || book.id === "3" || book.id === "4";
+
+    if (isPredefined) {
+      // Prioritize Arabic high-quality literary text for default predefined books
+      let arabicText = getArabicBookPageText(book.id, currentPage);
+      if (isDoublePage) {
+        const { left, right } = getDoublePagePair();
+        const otherPageNum = currentPage === right ? left : right;
+        if (otherPageNum && otherPageNum <= numPages) {
+          const secondPageText = getArabicBookPageText(book.id, otherPageNum);
+          arabicText = isRTL ? `${secondPageText} \n\n ${arabicText}` : `${arabicText} \n\n ${secondPageText}`;
+        }
+      }
+      speakText(arabicText);
+      return;
+    }
+
+    if (!pdfDoc) {
+      // Speak generic title metadata for non-pdf fallback placeholders
+      speakText(`هذا الكتاب بعنوان ${book.title}، للكاتب ${book.author}. الصفحة الحالية هي رقم ${currentPage}.`);
+      return;
+    }
+
+    try {
+      setIsExtractingText(true);
+      
+      // Get current page
+      const page = await pdfDoc.getPage(currentPage);
+      const textContent = await page.getTextContent();
+      let text = textContent.items
+        .map((item: any) => item.str)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
+
+      // If in double page mode and the other page is visible, concatenate it
+      if (isDoublePage) {
+        const { left, right } = getDoublePagePair();
+        const otherPageNum = currentPage === right ? left : right;
+        if (otherPageNum && otherPageNum <= numPages) {
+          try {
+            const otherPage = await pdfDoc.getPage(otherPageNum);
+            const otherTextContent = await otherPage.getTextContent();
+            const otherText = otherTextContent.items
+              .map((item: any) => item.str)
+              .join(" ")
+              .replace(/\s+/g, " ")
+              .trim();
+            if (otherText) {
+              text = isRTL ? `${otherText} \n\n ${text}` : `${text} \n\n ${otherText}`;
+            }
+          } catch (err) {
+            console.warn("Failed to extract second page text for speech:", err);
+          }
+        }
+      }
+
+      setIsExtractingText(false);
+
+      if (!text || text.length < 5) {
+        text = `الصفحة رقم ${currentPage}. هذا الملف قد يكون عبارة عن صور ممسوحة ضوئياً، يرجى تشغيل القراءة الصوتية لصفحة أخرى تحتوي على نصوص قابلة للنسخ.`;
+      }
+
+      speakText(text);
+
+    } catch (err) {
+      console.error("Error extracting text for speech:", err);
+      setIsExtractingText(false);
+      speakText(`عذراً، حدث خطأ أثناء استخراج النص من الصفحة رقم ${currentPage}.`);
+    }
+  };
+
   // PDF JS References
   const [pdfDoc, setPdfDoc] = useState<any>(null);
   const [renderedPages, setRenderedPages] = useState<{ [pageNum: number]: string }>({});
@@ -225,6 +458,9 @@ export default function ThreeDFlipbook({
   const [notes, setNotes] = useState<BookNote[]>([]);
   const [activeNoteText, setActiveNoteText] = useState<string>("");
   const [showNotesPanel, setShowNotesPanel] = useState<boolean>(false);
+  const [showSidebar, setShowSidebar] = useState<boolean>(false);
+  const [sidebarTab, setSidebarTab] = useState<"index" | "bookmarks" | "notes">("index");
+  const [parsedOutline, setParsedOutline] = useState<{ title: string; page: number }[]>([]);
   
   // Drag / Touch state for flipping page gesture
   const dragStartX = useRef<number | null>(null);
@@ -315,15 +551,16 @@ export default function ThreeDFlipbook({
     };
   };
 
-  // Close notes panel and hide HUD when entering Comfortable Reading Mode
+  // Close notes panel, sidebar, and hide HUD when entering Comfortable Reading Mode
   useEffect(() => {
     if (settings.readingMode) {
       setShowNotesPanel(false);
+      setShowSidebar(false);
       setShowReadingHud(false);
     }
   }, [settings.readingMode]);
 
-  // Web Audio synthesized paper turning effect (100% offline & clean)
+  // Web Audio synthesized paper turning effect (Highly realistic paper model)
   const playPageTurnSound = () => {
     if (!soundEnabled) return;
     try {
@@ -331,8 +568,7 @@ export default function ThreeDFlipbook({
       if (!AudioContext) return;
       const ctx = new AudioContext();
       
-      // 1. Physical paper rustling friction (White noise)
-      const duration = 0.55; // slightly longer, more organic turn
+      const duration = 0.65; // realistic human page turn speed
       const bufferSize = ctx.sampleRate * duration;
       const buffer = ctx.createBuffer(1, bufferSize, ctx.sampleRate);
       const data = buffer.getChannelData(0);
@@ -340,50 +576,64 @@ export default function ThreeDFlipbook({
         data[i] = Math.random() * 2 - 1;
       }
       
-      const noise = ctx.createBufferSource();
-      noise.buffer = buffer;
+      // Node 1: Crisp "Flick/Crinkle" at the very beginning of the page turn
+      const crispNoise = ctx.createBufferSource();
+      crispNoise.buffer = buffer;
       
-      const filter = ctx.createBiquadFilter();
-      filter.type = "lowpass";
-      filter.frequency.setValueAtTime(800, ctx.currentTime);
-      filter.frequency.exponentialRampToValueAtTime(150, ctx.currentTime + duration);
+      const highpass = ctx.createBiquadFilter();
+      highpass.type = "highpass";
+      highpass.frequency.setValueAtTime(4500, ctx.currentTime);
+      highpass.frequency.exponentialRampToValueAtTime(1800, ctx.currentTime + 0.15);
+      
+      const crispGain = ctx.createGain();
+      crispGain.gain.setValueAtTime(0.001, ctx.currentTime);
+      crispGain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 0.03); // quick snap attack
+      crispGain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18); // very quick fade out
+      
+      crispNoise.connect(highpass);
+      highpass.connect(crispGain);
+      crispGain.connect(ctx.destination);
+      
+      // Node 2: Main "Rustle/Slide" friction of one paper page moving across another
+      const rustleNoise = ctx.createBufferSource();
+      rustleNoise.buffer = buffer;
       
       const bandpass = ctx.createBiquadFilter();
       bandpass.type = "bandpass";
-      bandpass.frequency.setValueAtTime(400, ctx.currentTime);
-      bandpass.frequency.linearRampToValueAtTime(600, ctx.currentTime + 0.2);
-      bandpass.frequency.exponentialRampToValueAtTime(120, ctx.currentTime + duration);
-      bandpass.Q.setValueAtTime(2.5, ctx.currentTime);
+      bandpass.frequency.setValueAtTime(1100, ctx.currentTime); // mid-range rustling frequency
+      bandpass.frequency.exponentialRampToValueAtTime(320, ctx.currentTime + duration);
+      bandpass.Q.setValueAtTime(3.0, ctx.currentTime);
       
-      const noiseGain = ctx.createGain();
-      noiseGain.gain.setValueAtTime(0.005, ctx.currentTime);
-      noiseGain.gain.linearRampToValueAtTime(0.14, ctx.currentTime + 0.12);
-      noiseGain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + duration);
+      const rustleGain = ctx.createGain();
+      rustleGain.gain.setValueAtTime(0.001, ctx.currentTime);
+      rustleGain.gain.linearRampToValueAtTime(0.09, ctx.currentTime + 0.12); // smooth build-up
+      rustleGain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
       
-      noise.connect(filter);
-      filter.connect(bandpass);
-      bandpass.connect(noiseGain);
-      noiseGain.connect(ctx.destination);
+      rustleNoise.connect(bandpass);
+      bandpass.connect(rustleGain);
+      rustleGain.connect(ctx.destination);
       
-      // 2. Synthesized air swoop/whoosh of lifting the paper sheet (Triangle Oscillator Sweep)
-      const osc = ctx.createOscillator();
-      const oscGain = ctx.createGain();
+      // Node 3: Deep "Air Whoosh" representing the air displacement of the heavy paper sheet
+      const whooshOsc = ctx.createOscillator();
+      whooshOsc.type = "triangle"; // soft, deep, and organic wave
+      whooshOsc.frequency.setValueAtTime(140, ctx.currentTime); // deeper register
+      whooshOsc.frequency.exponentialRampToValueAtTime(45, ctx.currentTime + duration - 0.05);
       
-      osc.type = "triangle"; // Softer and deeper wave representing air movement
-      osc.frequency.setValueAtTime(240, ctx.currentTime); // Pitch sweep
-      osc.frequency.exponentialRampToValueAtTime(65, ctx.currentTime + duration - 0.1);
+      const whooshGain = ctx.createGain();
+      whooshGain.gain.setValueAtTime(0.001, ctx.currentTime);
+      whooshGain.gain.linearRampToValueAtTime(0.05, ctx.currentTime + 0.22); // peaked as page lifts half-way
+      whooshGain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
       
-      oscGain.gain.setValueAtTime(0.001, ctx.currentTime);
-      oscGain.gain.linearRampToValueAtTime(0.07, ctx.currentTime + 0.15); // Build-up as page lifts
-      oscGain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
+      whooshOsc.connect(whooshGain);
+      whooshGain.connect(ctx.destination);
       
-      osc.connect(oscGain);
-      oscGain.connect(ctx.destination);
+      // Start all sound components in perfect synchronization
+      crispNoise.start();
+      rustleNoise.start();
+      whooshOsc.start();
       
-      // Start both nodes
-      noise.start();
-      osc.start();
-      osc.stop(ctx.currentTime + duration);
+      // Stop oscillator
+      whooshOsc.stop(ctx.currentTime + duration);
     } catch (e) {
       console.warn("Audio Context blocked or unsupported:", e);
     }
@@ -392,6 +642,52 @@ export default function ThreeDFlipbook({
   // Convert Google Drive Links or load standard / Local URLs
   useEffect(() => {
     let active = true;
+    setParsedOutline([]);
+
+    const extractOutline = async (docObj: any) => {
+      try {
+        const rawOutline = await docObj.getOutline();
+        if (rawOutline && rawOutline.length > 0) {
+          const items: { title: string; page: number }[] = [];
+          const traverse = async (nodes: any[]) => {
+            for (const node of nodes) {
+              try {
+                let pageNum = 0;
+                if (node.dest) {
+                  let dest = node.dest;
+                  if (typeof dest === "string") {
+                    dest = await docObj.getDestination(dest);
+                  }
+                  if (Array.isArray(dest) && dest[0]) {
+                    const pageRef = dest[0];
+                    const pageIdx = await docObj.getPageIndex(pageRef);
+                    pageNum = pageIdx + 1;
+                  }
+                }
+                if (pageNum > 0) {
+                  items.push({ title: node.title, page: pageNum });
+                }
+                if (node.items && node.items.length > 0) {
+                  await traverse(node.items);
+                }
+              } catch (err) {
+                console.error("Error parsing node:", err);
+              }
+            }
+          };
+          await traverse(rawOutline);
+          if (active) {
+            setParsedOutline(items);
+          }
+        } else {
+          if (active) setParsedOutline([]);
+        }
+      } catch (err) {
+        console.error("Error loading PDF outline:", err);
+        if (active) setParsedOutline([]);
+      }
+    };
+
     const loadPdf = async () => {
       setIsBookLoaded(false);
       setLoadError(null);
@@ -516,6 +812,7 @@ export default function ThreeDFlipbook({
         
         setPdfDoc(doc);
         setNumPages(doc.numPages);
+        await extractOutline(doc);
         
         // Detect PDF page orientation (Landscape vs Portrait)
         try {
@@ -563,6 +860,7 @@ export default function ThreeDFlipbook({
           
           setPdfDoc(doc);
           setNumPages(doc.numPages);
+          await extractOutline(doc);
           
           // Detect fallback PDF page orientation (Landscape vs Portrait)
           try {
@@ -635,6 +933,84 @@ export default function ThreeDFlipbook({
       localStorage.setItem(`progress_${book.id}`, currentPage.toString());
     }
   }, [currentPage, book.id, isBookLoaded]);
+
+  // Generate Table of Contents (فهرس الكتاب) list
+  const getChapterList = () => {
+    if (parsedOutline && parsedOutline.length > 0) {
+      return parsedOutline;
+    }
+    
+    // Fallback/Default chapter definitions for default Sudanese literature
+    if (book.id === "def_1" || book.title.includes("الهجرة") || book.title.includes("موسم")) {
+      return [
+        { title: "غلاف الرواية والواجهة الرئيسية", page: 1 },
+        { title: "الفصل الأول: العودة إلى ديار الأهل والوطن", page: 2 },
+        { title: "الفصل الثاني: لغز مصطفى سعيد ومجلس السمر", page: 3 },
+        { title: "الفصل الثالث: صراع الهوية والذات الكولونيالية", page: 4 },
+        { title: "الفصل الرابع: الغرفة السرية وميراث الندم الإنجليزي", page: 5 },
+        { title: "الفصل الخامس: جريان النيل وصدى الأصوات القديمة", page: 6 },
+        { title: "الفصل السادس: تحت سموات الصحراء والنجوم الصافية", page: 7 },
+        { title: "الخاتمة: عبقرية السرد وتأملات النهاية الغامضة", page: 8 }
+      ];
+    } else if (book.id === "def_2" || book.title.includes("كوش") || book.title.includes("حضارة")) {
+      return [
+        { title: "غلاف الكتاب والواجهة الرئيسية", page: 1 },
+        { title: "الفصل الأول: مهد الفراعنة السود وسلالة النوبة", page: 2 },
+        { title: "الفصل الثاني: أهرامات مروي وتشييد الآثار الخالدة", page: 3 },
+        { title: "الفصل الثالث: الكنداكات (ملكات المحاربين العظماء)", page: 4 },
+        { title: "الفصل الرابع: صناعة الحديد والتجارة في مروي القديمة", page: 5 },
+        { title: "الفصل الخامس: المدينة الملكية المقدسة في معابد النقعة", page: 6 },
+        { title: "الفصل السادس: جبل البركل المقدس وموطن الآلهة الفرعونية", page: 7 },
+        { title: "الخاتمة: جهود حماية وتوثيق التراث السوداني القديم", page: 8 }
+      ];
+    } else if (book.id === "def_3" || book.title.includes("ديوان") || book.title.includes("الشعر")) {
+      return [
+        { title: "غلاف الديوان والواجهة الرئيسية", page: 1 },
+        { title: "القصيدة الأولى: أنشودة النيل والفيضان والأرض المعطاءة", page: 2 },
+        { title: "القصيدة الثانية: حنين ووجد إلى الخرطوم ملتقى النيلين", page: 3 },
+        { title: "القصيدة الثالثة: كبرياء الصحراء وخصال الكرم والشهامة", page: 4 },
+        { title: "القصيدة الرابعة: همسات أشجار السنط والظل تحت الهجير", page: 5 },
+        { title: "القصيدة الخامسة: مزمار الراعي في سهول كردفان الغنّاء", page: 6 },
+        { title: "القصيدة السادسة: نشيد الحرية وكفاح الكلمة الثائرة", page: 7 },
+        { title: "الخاتمة: شهادة فنية خالدة لروح السودان الشاعر والمعطاء", page: 8 }
+      ];
+    } else if (book.id === "def_4" || book.title.includes("الأمثال") || book.title.includes("الفولكلور")) {
+      return [
+        { title: "غلاف الكتاب والواجهة الرئيسية", page: 1 },
+        { title: "المثل الأول: 'الجرح بالجرح' وبلسم المودة والوفاء الكاشف", page: 2 },
+        { title: "المثل الثاني: 'إذا الغيم كتر' وبشائر الخير والبركات القادمة", page: 3 },
+        { title: "المثل الثالث: 'الأخوات في السدة' ومحك الشدائد والنوائب الصعبة", page: 4 },
+        { title: "المثل الرابع: 'الباب البيجيب الريح' وعافية التسامح والسلامة", page: 5 },
+        { title: "المثل الخامس: 'الأعور في وسط العميان' ونسبية المعارف والقدرات", page: 6 },
+        { title: "المثل السادس: 'الكلام في شط النهر' وميزان التجربة والأفعال الحية", page: 7 },
+        { title: "الخاتمة: فكر البروفيسور بابكر بدري وأهمية التوثيق الشعبي", page: 8 }
+      ];
+    }
+    
+    // Fallback for general uploaded or customized books
+    const list = [{ title: "صفحة الغلاف والواجهة الأولى", page: 1 }];
+    if (numPages > 1) {
+      if (numPages <= 15) {
+        for (let i = 2; i <= numPages; i++) {
+          if (i === numPages) {
+            list.push({ title: `الخاتمة والمراجع النهائية (الصفحة ${i})`, page: i });
+          } else {
+            list.push({ title: `القسم أو الفصل الفرعي ${i - 1} (الصفحة ${i})`, page: i });
+          }
+        }
+      } else {
+        list.push({ title: "مقدمة وتمهيد الكتاب والمدخل العام (الصفحة 2)", page: 2 });
+        const step = Math.max(3, Math.floor((numPages - 4) / 5));
+        let chapterIdx = 1;
+        for (let p = 5; p < numPages - 2; p += step) {
+          list.push({ title: `الباب ${chapterIdx}: تفاصيل الموضوع العام (الصفحة ${p})`, page: p });
+          chapterIdx++;
+        }
+        list.push({ title: `الخاتمة والملخص وقائمة المراجع (الصفحة ${numPages})`, page: numPages });
+      }
+    }
+    return list;
+  };
 
   // Render PDF page to high-quality image cache for instantaneous flip performance
   const renderPageToCache = async (pageNum: number) => {
@@ -1021,6 +1397,17 @@ export default function ThreeDFlipbook({
                 {settings.darkMode ? <Sun className="w-4.5 h-4.5" /> : <Moon className="w-4.5 h-4.5" />}
               </button>
 
+              {/* Fullscreen toggle */}
+              <button
+                onClick={toggleFullscreen}
+                className={`p-2 rounded-lg transition-all ${
+                  isFullscreen ? "bg-[#5A5A40] text-white" : settings.darkMode ? "bg-[#3A3029] hover:bg-[#4E4138] text-[#F3EFE0]" : "bg-[#E6E0D4] hover:bg-[#DED6C7] text-[#4A3B32]"
+                }`}
+                title="ملء الشاشة"
+              >
+                {isFullscreen ? <Minimize className="w-4.5 h-4.5" /> : <Maximize className="w-4.5 h-4.5" />}
+              </button>
+
               {/* Zoom buttons */}
               <div className="flex items-center bg-transparent rounded-lg border border-neutral-300 dark:border-[#52453D] overflow-hidden">
                 <button
@@ -1046,30 +1433,176 @@ export default function ThreeDFlipbook({
                 </button>
               </div>
 
-              {/* Bookmark Toggle */}
+              {/* Text-to-Speech Control */}
+              <div className="relative flex items-center gap-1">
+                <button
+                  onClick={handleSpeakCurrentPage}
+                  disabled={isExtractingText}
+                  className={`p-2 rounded-lg transition-all flex items-center gap-1.5 ${
+                    isSpeaking
+                      ? "bg-[#9E4233] text-white animate-pulse"
+                      : settings.darkMode ? "bg-[#3A3029]/80 hover:bg-[#3A3029] text-[#EADDC9]" : "bg-[#E6E0D4] hover:bg-[#DFCDB0] text-[#4A3B32]"
+                  }`}
+                  title={isSpeaking ? "إيقاف القراءة الصوتية" : "استمع لهذه الصفحة (قراءة صوتية)"}
+                >
+                  {isExtractingText ? (
+                    <Loader2 className="w-4.5 h-4.5 animate-spin" />
+                  ) : isSpeaking ? (
+                    <Pause className="w-4.5 h-4.5" />
+                  ) : (
+                    <Headphones className="w-4.5 h-4.5" />
+                  )}
+                  <span className="text-xs hidden md:inline">
+                    {isExtractingText ? "جاري استخراج النص..." : isSpeaking ? "إيقاف القراءة" : "قراءة صوتية"}
+                  </span>
+                </button>
+
+                {/* TTS Settings Toggle Button */}
+                <button
+                  onClick={() => setShowTtsSettings(!showTtsSettings)}
+                  className={`p-2 rounded-lg transition-all ${
+                    showTtsSettings
+                      ? "bg-[#5A5A40] text-white"
+                      : settings.darkMode ? "bg-[#3A3029]/80 hover:bg-[#3A3029] text-[#EADDC9]" : "bg-[#E6E0D4] hover:bg-[#DFCDB0] text-[#4A3B32]"
+                  }`}
+                  title="إعدادات الصوت"
+                >
+                  <Settings className="w-4 h-4" />
+                </button>
+
+                {/* Floating TTS Settings Popover */}
+                {showTtsSettings && (
+                  <div className={`absolute bottom-full mb-2 right-0 z-50 w-56 p-4 rounded-xl shadow-2xl border ${
+                    settings.darkMode 
+                      ? "bg-[#2B211C] border-[#4A3B32] text-[#EADDC9]" 
+                      : "bg-white border-[#E6E0D4] text-[#4A3B32]"
+                  } text-right animate-fade-in`}>
+                    <div className="flex items-center justify-between gap-2 border-b border-[#E6E0D4]/20 pb-2 mb-3">
+                      <button 
+                        onClick={() => setShowTtsSettings(false)}
+                        className="p-1 rounded hover:bg-black/10 text-xs"
+                      >
+                        <X className="w-3.5 h-3.5" />
+                      </button>
+                      <h4 className="text-xs font-bold font-serif flex items-center gap-1.5 justify-end">
+                        <Settings className="w-3.5 h-3.5 text-[#9E4233]" />
+                        <span>إعدادات القارئ الصوتي</span>
+                      </h4>
+                    </div>
+
+                    {/* Speed / Rate control */}
+                    <div className="mb-3.5">
+                      <label className="block text-[10px] font-bold opacity-75 mb-1.5">سرعة الصوت (نبرة القراءة):</label>
+                      <div className="flex items-center gap-2">
+                        <span className="text-[10px] font-mono w-8 text-left">{ttsSpeed}x</span>
+                        <input 
+                          type="range" 
+                          min="0.5" 
+                          max="2.0" 
+                          step="0.1" 
+                          value={ttsSpeed}
+                          onChange={(e) => setTtsSpeed(parseFloat(e.target.value))}
+                          className="flex-1 h-1.5 bg-[#E6E0D4] rounded-lg appearance-none cursor-pointer accent-[#9E4233]"
+                        />
+                      </div>
+                    </div>
+
+                    {/* Language Selection */}
+                    <div>
+                      <label className="block text-[10px] font-bold opacity-75 mb-1.5">لغة القراءة والصوت:</label>
+                      <select
+                        value={ttsLang}
+                        onChange={(e) => setTtsLang(e.target.value)}
+                        className={`w-full text-xs p-1.5 rounded-lg border focus:outline-none focus:ring-1 focus:ring-[#5A5A40] ${
+                          settings.darkMode 
+                            ? "bg-[#3D2F27] border-[#4A3B32] text-[#EADDC9]" 
+                            : "bg-white border-[#E6E0D4] text-[#4A3B32]"
+                        }`}
+                      >
+                        <option value="auto">تعرف تلقائي (عربي/إنجليزي)</option>
+                        <option value="ar-SA">العربية (السعودية) 🇸🇦</option>
+                        <option value="en-US">الإنجليزية (أمريكا) 🇺🇸</option>
+                        <option value="fr-FR">الفرنسية (فرنسا) 🇫🇷</option>
+                      </select>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Bookmark Toggle (Adds/removes bookmark for current page) */}
               <button
                 onClick={toggleBookmark}
                 className={`p-2 rounded-lg transition-all ${
                   bookmarks.some(b => b.page === currentPage)
-                    ? "bg-[#5A5A40] text-white"
+                    ? "bg-[#9E4233] text-white animate-pulse"
                     : settings.darkMode ? "hover:bg-[#3A3029]" : "hover:bg-[#E6E0D4]"
                 }`}
-                title="حفظ علامة مرجعية هنا"
+                title="تثبيت/إزالة علامة مرجعية للصفحة الحالية"
               >
                 <BookmarkIcon className="w-4.5 h-4.5" />
               </button>
 
-              {/* Notes sidebar toggle */}
+              {/* Table of Contents (الفهرس) */}
               <button
-                onClick={() => setShowNotesPanel(!showNotesPanel)}
+                onClick={() => {
+                  if (showSidebar && sidebarTab === "index") {
+                    setShowSidebar(false);
+                  } else {
+                    setShowSidebar(true);
+                    setSidebarTab("index");
+                  }
+                }}
                 className={`p-2 rounded-lg transition-all flex items-center gap-1.5 ${
-                  showNotesPanel
+                  showSidebar && sidebarTab === "index"
+                    ? "bg-[#5A5A40] text-white"
+                    : settings.darkMode ? "hover:bg-[#3A3029]" : "hover:bg-[#E6E0D4]"
+                }`}
+                title="فهرس ومحتويات الكتاب"
+              >
+                <BookOpen className="w-4.5 h-4.5 text-amber-500" />
+                <span className="text-xs hidden md:inline">الفهرس</span>
+              </button>
+
+              {/* Bookmarks List Sidebar Toggle */}
+              <button
+                onClick={() => {
+                  if (showSidebar && sidebarTab === "bookmarks") {
+                    setShowSidebar(false);
+                  } else {
+                    setShowSidebar(true);
+                    setSidebarTab("bookmarks");
+                  }
+                }}
+                className={`p-2 rounded-lg transition-all flex items-center gap-1.5 ${
+                  showSidebar && sidebarTab === "bookmarks"
+                    ? "bg-[#5A5A40] text-white"
+                    : settings.darkMode ? "hover:bg-[#3A3029]" : "hover:bg-[#E6E0D4]"
+                }`}
+                title="العلامات المرجعية المحفوظة"
+              >
+                <Compass className="w-4.5 h-4.5 text-emerald-500" />
+                <span className="text-xs hidden md:inline">العلامات المرجعية</span>
+              </button>
+
+              {/* Notes Sidebar Toggle */}
+              <button
+                onClick={() => {
+                  if (showSidebar && sidebarTab === "notes") {
+                    setShowSidebar(false);
+                  } else {
+                    setShowSidebar(true);
+                    setSidebarTab("notes");
+                  }
+                }}
+                className={`p-2 rounded-lg transition-all flex items-center gap-1.5 ${
+                  showSidebar && sidebarTab === "notes"
                     ? "bg-[#4A3B32] text-white dark:bg-[#5A5A40]"
                     : settings.darkMode ? "hover:bg-[#3A3029]" : "hover:bg-[#E6E0D4]"
                 }`}
+                title="ملاحظات الكتاب وهوامشه"
               >
-                <FileText className="w-4.5 h-4.5" />
-                <span className="text-xs hidden md:inline">الهوامش والملاحظات</span>
+                <FileText className="w-4.5 h-4.5 text-sky-500" />
+                <span className="text-xs hidden md:inline">الهوامش</span>
               </button>
             </div>
 
@@ -1701,102 +2234,236 @@ export default function ThreeDFlipbook({
 
         </main>
 
-        {/* Notes sidebar panel */}
+        {/* Comprehensive Reader Sidebar Panel (TOC, Bookmarks, and Notes) */}
         <AnimatePresence>
-          {showNotesPanel && (
+          {showSidebar && (
             <motion.aside 
-              initial={{ x: "100%" }}
+              initial={{ x: "-100%" }}
               animate={{ x: 0 }}
-              exit={{ x: "100%" }}
+              exit={{ x: "-100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 180 }}
               className={`fixed top-0 bottom-0 left-0 w-80 md:w-96 z-50 border-r shadow-2xl flex flex-col ${
                 settings.darkMode 
-                  ? "border-[#3A3029] bg-[#221B17]" 
-                  : "border-[#E6E0D4] bg-[#FDFBF7]"
+                  ? "border-[#3A3029] bg-[#221B17] text-[#FAF6EE]" 
+                  : "border-[#E6E0D4] bg-[#FDFBF7] text-[#4A3B32]"
               }`}
             >
+              {/* Sidebar Header */}
               <div className="p-4 border-b border-[#E6E0D4] dark:border-[#3A3029] flex justify-between items-center">
-                <h3 className="font-bold text-[#5A5A40] text-sm">ملاحظات وهوامش الكتاب</h3>
+                <div className="flex items-center gap-2">
+                  <BookOpen className="w-4.5 h-4.5 text-[#5A5A40]" />
+                  <h3 className="font-bold text-[#5A5A40] text-sm">مساعد القراءة الجانبي</h3>
+                </div>
                 <button 
-                  onClick={() => setShowNotesPanel(false)}
-                  className="p-1.5 rounded-lg hover:bg-neutral-200 dark:hover:bg-[#3A3029]"
+                  onClick={() => setShowSidebar(false)}
+                  className="p-1.5 rounded-lg hover:bg-neutral-200 dark:hover:bg-[#3A3029] transition-all"
                 >
                   <X className="w-5 h-5" />
                 </button>
               </div>
 
-              {/* Note adding form */}
-              <form onSubmit={handleAddNote} className="p-4 border-b border-[#E6E0D4] dark:border-[#3A3029]">
-                <div className="flex justify-between text-xs mb-2 text-[#5A5A40] font-bold">
-                  <span>تأليف الهامش على الصفحة الحالية</span>
-                  <span>الصفحة {currentPage}</span>
-                </div>
-                <textarea
-                  value={activeNoteText}
-                  onChange={(e) => setActiveNoteText(e.target.value)}
-                  placeholder="اكتب فكرتك أو اقتباسك هنا للرجوع إليها لاحقاً..."
-                  rows={3}
-                  className={`w-full p-2.5 text-xs rounded-xl border focus:ring-1 focus:ring-[#5A5A40] outline-none ${
-                    settings.darkMode 
-                      ? "bg-[#332822] border-[#42332B]" 
-                      : "bg-[#FAF7EE] border-[#E6E0D4]"
-                  }`}
-                />
+              {/* Sidebar Tabs Switcher */}
+              <div className="flex border-b border-[#E6E0D4] dark:border-[#3A3029] bg-black/5 dark:bg-white/5">
                 <button
-                  type="submit"
-                  disabled={!activeNoteText.trim()}
-                  className="w-full mt-3 bg-[#5A5A40] hover:bg-[#4A4A32] text-white text-xs font-semibold py-2 rounded-lg disabled:opacity-50 transition-colors"
+                  onClick={() => setSidebarTab("index")}
+                  className={`flex-1 py-3 text-xs font-bold transition-all border-b-2 text-center ${
+                    sidebarTab === "index"
+                      ? "border-[#5A5A40] text-[#5A5A40] bg-[#5A5A40]/10"
+                      : "border-transparent text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+                  }`}
                 >
-                  حفظ الهامش
+                  فهرس الكتاب
                 </button>
-              </form>
+                <button
+                  onClick={() => setSidebarTab("bookmarks")}
+                  className={`flex-1 py-3 text-xs font-bold transition-all border-b-2 text-center ${
+                    sidebarTab === "bookmarks"
+                      ? "border-[#5A5A40] text-[#5A5A40] bg-[#5A5A40]/10"
+                      : "border-transparent text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+                  }`}
+                >
+                  العلامات ({bookmarks.length})
+                </button>
+                <button
+                  onClick={() => setSidebarTab("notes")}
+                  className={`flex-1 py-3 text-xs font-bold transition-all border-b-2 text-center ${
+                    sidebarTab === "notes"
+                      ? "border-[#5A5A40] text-[#5A5A40] bg-[#5A5A40]/10"
+                      : "border-transparent text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
+                  }`}
+                >
+                  الهوامش ({notes.length})
+                </button>
+              </div>
 
-              {/* Notes list */}
-              <div className="flex-1 p-4 overflow-y-auto space-y-3">
-                <h4 className="text-xs font-semibold opacity-70 mb-2">الهوامش المحفوظة للكتاب ({notes.length})</h4>
-                
-                {notes.length === 0 ? (
-                  <div className="text-center py-10 opacity-60 text-xs italic">
-                    لا توجد أي هوامش مكتوبة بعد.
-                  </div>
-                ) : (
-                  notes.map((nt) => (
-                    <div 
-                      key={nt.id}
-                      className={`p-3 rounded-xl border text-xs relative ${
-                        settings.darkMode 
-                          ? "bg-[#2D2520] border-[#3D322A]" 
-                          : "bg-[#FAF6EE] border-[#E6E0D4]"
+              {/* TAB CONTENT: TABLE OF CONTENTS (فهرس الكتاب) */}
+              {sidebarTab === "index" && (
+                <div className="flex-1 p-4 overflow-y-auto space-y-2">
+                  <h4 className="text-xs font-bold text-[#5A5A40] mb-3 flex items-center gap-1">
+                    <span>فهرس الأبواب والمباحث</span>
+                    <span className="text-[10px] opacity-60">({getChapterList().length})</span>
+                  </h4>
+                  {getChapterList().map((ch, i) => (
+                    <button
+                      key={i}
+                      onClick={() => {
+                        if (!isFlipping) {
+                          setCurrentPage(ch.page);
+                          playPageTurnSound();
+                        }
+                      }}
+                      className={`w-full text-right p-3 rounded-xl border text-xs flex justify-between items-center transition-all ${
+                        currentPage === ch.page
+                          ? "bg-[#5A5A40] text-white border-[#5A5A40]"
+                          : settings.darkMode
+                            ? "bg-[#2D2520] border-[#3D322A] hover:bg-[#3D322A]"
+                            : "bg-[#FAF6EE] border-[#EADDC9] hover:bg-[#FAF0D9]"
                       }`}
                     >
-                      <div className="flex justify-between items-center mb-1 text-[#5A5A40] font-bold">
-                        <button 
+                      <span className="font-bold truncate max-w-[210px]">{ch.title}</span>
+                      <span className="text-[10px] font-semibold opacity-80 font-mono px-2 py-0.5 bg-black/5 dark:bg-white/10 rounded">صفحة {ch.page}</span>
+                    </button>
+                  ))}
+                </div>
+              )}
+
+              {/* TAB CONTENT: BOOKMARKS (العلامات المرجعية) */}
+              {sidebarTab === "bookmarks" && (
+                <div className="flex-1 p-4 overflow-y-auto space-y-3">
+                  <div className="flex items-center justify-between text-xs text-[#5A5A40] font-bold mb-2">
+                    <span>العلامات المرجعية المحفوظة</span>
+                    <button
+                      onClick={toggleBookmark}
+                      className="text-[10px] bg-[#9E4233] text-white px-2.5 py-1 rounded-lg hover:bg-[#853428] transition-colors shadow-sm"
+                    >
+                      {bookmarks.some(b => b.page === currentPage) ? "إزالة الحالية" : "حفظ الحالية"}
+                    </button>
+                  </div>
+
+                  {bookmarks.length === 0 ? (
+                    <div className="text-center py-10 opacity-60 text-xs italic bg-[#5A5A40]/5 p-4 rounded-xl border border-dashed border-[#5A5A40]/20">
+                      لا توجد أي علامات محفوظة بعد. اضغط على أيقونة العلامة لحفظ صفحة توقفك لتتمكن من العودة لاحقاً بضغطة واحدة.
+                    </div>
+                  ) : (
+                    bookmarks.map((bm) => (
+                      <div
+                        key={bm.id}
+                        className={`p-3 rounded-xl border text-xs flex justify-between items-center transition-all relative ${
+                          currentPage === bm.page ? "ring-2 ring-[#5A5A40]" : ""
+                        } ${
+                          settings.darkMode 
+                            ? "bg-[#2D2520] border-[#3D322A]" 
+                            : "bg-[#FAF6EE] border-[#E6E0D4]"
+                        }`}
+                      >
+                        <button
                           onClick={() => {
                             if (!isFlipping) {
-                              setCurrentPage(nt.page);
+                              setCurrentPage(bm.page);
                               playPageTurnSound();
                             }
                           }}
-                          className="hover:underline text-[10px]"
+                          className="hover:underline text-right flex-1"
                         >
-                          الصفحة {nt.page}
+                          <div className="font-bold text-[#5A5A40]">الصفحة {bm.page}</div>
+                          <div className="text-[10px] opacity-50 mt-1">
+                            تم الحفظ: {new Date(bm.createdAt).toLocaleDateString("ar-EG")}
+                          </div>
                         </button>
                         <button
-                          onClick={() => handleDeleteNote(nt.id)}
-                          className="text-red-500 hover:text-red-700 font-semibold"
-                          title="حذف الهامش"
+                          onClick={() => {
+                            const updated = bookmarks.filter(b => b.id !== bm.id);
+                            setBookmarks(updated);
+                            localStorage.setItem(`bookmarks_${book.id}`, JSON.stringify(updated));
+                          }}
+                          className="text-red-500 hover:text-red-700 font-bold text-[11px] px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/20"
+                          title="إزالة العلامة"
                         >
                           حذف
                         </button>
                       </div>
-                      <p className="leading-relaxed opacity-90 break-words">{nt.text}</p>
-                      <div className="text-[9px] opacity-50 mt-2 text-left">
-                        {new Date(nt.createdAt).toLocaleString("ar-EG")}
-                      </div>
+                    ))
+                  )}
+                </div>
+              )}
+
+              {/* TAB CONTENT: NOTES & MARGINS (الهوامش) */}
+              {sidebarTab === "notes" && (
+                <div className="flex-1 flex flex-col overflow-hidden">
+                  {/* Note adding form */}
+                  <form onSubmit={handleAddNote} className="p-4 border-b border-[#E6E0D4] dark:border-[#3A3029]">
+                    <div className="flex justify-between text-xs mb-2 text-[#5A5A40] font-bold">
+                      <span>تأليف الهامش على الصفحة الحالية</span>
+                      <span>الصفحة {currentPage}</span>
                     </div>
-                  ))
-                )}
-              </div>
+                    <textarea
+                      value={activeNoteText}
+                      onChange={(e) => setActiveNoteText(e.target.value)}
+                      placeholder="اكتب فكرتك أو اقتباسك هنا للرجوع إليها لاحقاً..."
+                      rows={3}
+                      className={`w-full p-2.5 text-xs rounded-xl border focus:ring-1 focus:ring-[#5A5A40] outline-none ${
+                        settings.darkMode 
+                          ? "bg-[#332822] border-[#42332B]" 
+                          : "bg-[#FAF7EE] border-[#E6E0D4]"
+                      }`}
+                    />
+                    <button
+                      type="submit"
+                      disabled={!activeNoteText.trim()}
+                      className="w-full mt-3 bg-[#5A5A40] hover:bg-[#4A4A32] text-white text-xs font-semibold py-2 rounded-lg disabled:opacity-50 transition-colors"
+                    >
+                      حفظ الهامش
+                    </button>
+                  </form>
+
+                  {/* Notes list */}
+                  <div className="flex-1 p-4 overflow-y-auto space-y-3">
+                    <h4 className="text-xs font-semibold opacity-70 mb-2">الهوامش المحفوظة للكتاب ({notes.length})</h4>
+                    
+                    {notes.length === 0 ? (
+                      <div className="text-center py-10 opacity-60 text-xs italic">
+                        لا توجد أي هوامش مكتوبة بعد.
+                      </div>
+                    ) : (
+                      notes.map((nt) => (
+                        <div 
+                          key={nt.id}
+                          className={`p-3 rounded-xl border text-xs relative ${
+                            settings.darkMode 
+                              ? "bg-[#2D2520] border-[#3D322A]" 
+                              : "bg-[#FAF6EE] border-[#E6E0D4]"
+                          }`}
+                        >
+                          <div className="flex justify-between items-center mb-1 text-[#5A5A40] font-bold">
+                            <button 
+                              onClick={() => {
+                                if (!isFlipping) {
+                                  setCurrentPage(nt.page);
+                                  playPageTurnSound();
+                                }
+                              }}
+                              className="hover:underline text-[10px]"
+                            >
+                              الصفحة {nt.page}
+                            </button>
+                            <button
+                              onClick={() => handleDeleteNote(nt.id)}
+                              className="text-red-500 hover:text-red-700 font-semibold"
+                              title="حذف الهامش"
+                            >
+                              حذف
+                            </button>
+                          </div>
+                          <p className="leading-relaxed opacity-90 break-words">{nt.text}</p>
+                          <div className="text-[9px] opacity-50 mt-2 text-left">
+                            {new Date(nt.createdAt).toLocaleString("ar-EG")}
+                          </div>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              )}
             </motion.aside>
           )}
         </AnimatePresence>

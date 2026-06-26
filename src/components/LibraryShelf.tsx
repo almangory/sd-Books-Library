@@ -19,7 +19,11 @@ import {
   Unlock,
   LogOut,
   UserCheck,
-  ShieldAlert
+  ShieldAlert,
+  Wifi,
+  WifiOff,
+  Maximize,
+  Minimize
 } from "lucide-react";
 
 interface LibraryShelfProps {
@@ -33,6 +37,7 @@ interface LibraryShelfProps {
   onAdminLogin: (password: string) => boolean;
   onAdminLogout: () => void;
   adminPassword?: string;
+  isOnline?: boolean;
 }
 
 export default function LibraryShelf({
@@ -45,8 +50,38 @@ export default function LibraryShelf({
   isAdmin,
   onAdminLogin,
   onAdminLogout,
-  adminPassword
+  adminPassword,
+  isOnline = true
 }: LibraryShelfProps) {
+  // Fullscreen state
+  const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
+
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+    document.addEventListener("fullscreenchange", handleFullscreenChange);
+    return () => {
+      document.removeEventListener("fullscreenchange", handleFullscreenChange);
+    };
+  }, []);
+
+  const toggleFullscreen = () => {
+    try {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch((err) => {
+          console.warn("Fullscreen permission denied:", err);
+        });
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    } catch (err) {
+      console.warn("Fullscreen API not supported in this environment:", err);
+    }
+  };
+
   // Admin password prompting flow
   const [showLoginModal, setShowLoginModal] = useState<boolean>(false);
   const [loginPassword, setLoginPassword] = useState<string>("");
@@ -74,6 +109,7 @@ export default function LibraryShelf({
   // States for editing book details
   const [showEditModal, setShowEditModal] = useState<boolean>(false);
   const [editingBook, setEditingBook] = useState<Book | null>(null);
+  const [confirmDeleteId, setConfirmDeleteId] = useState<string | null>(null);
   const [editTitle, setEditTitle] = useState<string>("");
   const [editAuthor, setEditAuthor] = useState<string>("");
   const [editUrl, setEditUrl] = useState<string>("");
@@ -82,6 +118,80 @@ export default function LibraryShelf({
 
   // Filter tab state
   const [activeTab, setActiveTab] = useState<string>("all");
+
+  // Sorting & Tagging States
+  const [sortBy, setSortBy] = useState<"date" | "alphabet">("date");
+  const [selectedTag, setSelectedTag] = useState<string>("all");
+
+  // Comma-separated tag input string states for modals
+  const [newTagsStr, setNewTagsStr] = useState<string>("");
+  const [uploadTagsStr, setUploadTagsStr] = useState<string>("");
+  const [editTagsStr, setEditTagsStr] = useState<string>("");
+
+  // Last opened book for 'Continue Reading' feature
+  const [lastOpenedBook, setLastOpenedBook] = useState<Book | null>(null);
+  const [lastOpenedPage, setLastOpenedPage] = useState<number | null>(null);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const lastId = localStorage.getItem("flipbook_last_opened_id");
+    if (lastId && books && books.length > 0) {
+      const found = books.find(b => b.id === lastId);
+      if (found) {
+        setLastOpenedBook(found);
+        const savedPage = localStorage.getItem(`progress_${found.id}`);
+        if (savedPage) {
+          setLastOpenedPage(parseInt(savedPage, 10));
+        } else {
+          setLastOpenedPage(1);
+        }
+      }
+    }
+  }, [books]);
+
+  // Unique list of tags from books
+  const allUniqueTags = React.useMemo(() => {
+    const tagsSet = new Set<string>();
+    books.forEach(b => {
+      if (b.tags && Array.isArray(b.tags)) {
+        b.tags.forEach(tag => {
+          const t = tag.trim();
+          if (t) tagsSet.add(t);
+        });
+      }
+    });
+    return Array.from(tagsSet);
+  }, [books]);
+
+  // Combined sorted and filtered books selector
+  const sortedAndFilteredBooks = React.useMemo(() => {
+    // 1. Filter by category tab
+    let list = books.filter(book => {
+      if (activeTab === "all") return true;
+      if (activeTab === "general") return book.category === "general" || !book.category;
+      return book.category === activeTab;
+    });
+
+    // 2. Filter by selected tag/group
+    if (selectedTag !== "all") {
+      list = list.filter(book => {
+        if (book.tags && Array.isArray(book.tags)) {
+          return book.tags.some(t => t.trim().toLowerCase() === selectedTag.toLowerCase());
+        }
+        return false;
+      });
+    }
+
+    // 3. Sort by date added or alphabetically
+    return [...list].sort((a, b) => {
+      if (sortBy === "alphabet") {
+        return a.title.localeCompare(b.title, "ar", { sensitivity: "base" });
+      } else {
+        // Sort by addition date (descending)
+        return (b.addedAt || 0) - (a.addedAt || 0);
+      }
+    });
+  }, [books, activeTab, selectedTag, sortBy]);
 
   // Help tips toggler
   const [showHelp, setShowHelp] = useState<boolean>(false);
@@ -104,6 +214,11 @@ export default function LibraryShelf({
     // Convert to direct Google Drive Link
     const parsedDirectUrl = getGoogleDriveDirectLink(newUrl);
 
+    const parsedTags = newTagsStr
+      .split(/[,،]/)
+      .map(t => t.trim())
+      .filter(t => t.length > 0);
+
     const customBook: Book = {
       id: "drive_" + Math.random().toString(36).substr(2, 9),
       title: newTitle.trim(),
@@ -113,7 +228,8 @@ export default function LibraryShelf({
       coverUrl: "", // Generate abstract traditional cover dynamically
       isCustom: true,
       addedAt: Date.now(),
-      category: newCategory
+      category: newCategory,
+      tags: parsedTags
     };
 
     onAddBook(customBook);
@@ -124,6 +240,7 @@ export default function LibraryShelf({
     setNewUrl("");
     setNewDesc("");
     setNewCategory("general");
+    setNewTagsStr("");
     setShowAddModal(false);
   };
 
@@ -161,6 +278,11 @@ export default function LibraryShelf({
         return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
       };
 
+      const parsedTags = uploadTagsStr
+        .split(/[,،]/)
+        .map(t => t.trim())
+        .filter(t => t.length > 0);
+
       const localBook: Book = {
         id: bookId,
         title: uploadTitle.trim(),
@@ -171,7 +293,8 @@ export default function LibraryShelf({
         isCustom: true,
         addedAt: Date.now(),
         category: uploadCategory,
-        fileSize: formatBytes(uploadFile.size)
+        fileSize: formatBytes(uploadFile.size),
+        tags: parsedTags
       };
 
       onAddBook(localBook);
@@ -181,6 +304,7 @@ export default function LibraryShelf({
       setUploadAuthor("");
       setUploadDesc("");
       setUploadCategory("general");
+      setUploadTagsStr("");
       setUploadFile(null);
       setShowUploadModal(false);
     } catch (err: any) {
@@ -237,6 +361,7 @@ export default function LibraryShelf({
       
       setEditDesc(book.description || "");
       setEditCategory(book.category || "general");
+      setEditTagsStr(book.tags && Array.isArray(book.tags) ? book.tags.join("، ") : "");
       setShowEditModal(true);
     });
   };
@@ -258,13 +383,19 @@ export default function LibraryShelf({
 
     const parsedDirectUrl = getGoogleDriveDirectLink(editUrl);
 
+    const parsedTags = editTagsStr
+      .split(/[,،]/)
+      .map(t => t.trim())
+      .filter(t => t.length > 0);
+
     const updatedBook: Book = {
       ...editingBook,
       title: editTitle.trim(),
       author: editAuthor.trim(),
       pdfUrl: parsedDirectUrl,
       description: editDesc.trim(),
-      category: editCategory
+      category: editCategory,
+      tags: parsedTags
     };
 
     onUpdateBook(updatedBook);
@@ -277,6 +408,7 @@ export default function LibraryShelf({
     setEditUrl("");
     setEditDesc("");
     setEditCategory("general");
+    setEditTagsStr("");
     setErrorMsg(null);
   };
 
@@ -321,6 +453,33 @@ export default function LibraryShelf({
       
       {/* 1. Sudan traditional Header Motif & Title Banner */}
       <div>
+        {/* Offline & Persistence status notice banners */}
+        {!isOnline && (
+          <div className="mb-6 p-4 rounded-2xl bg-amber-500/10 border border-amber-500/20 text-amber-900 flex items-center justify-between gap-4 flex-row-reverse shadow-sm animate-fade-in">
+            <div className="flex items-center gap-2.5 flex-row-reverse">
+              <WifiOff className="w-5 h-5 text-[#9E4233] animate-bounce shrink-0" />
+              <div className="text-right">
+                <p className="text-xs font-bold text-[#9E4233]">أنت تعمل حالياً دون اتصال بالإنترنت (Offline Mode)</p>
+                <p className="text-[11px] text-[#6D4C41]">تم تفعيل ذاكرة التصفح التلقائي؛ يمكنك مواصلة قراءة كتبك المفضلة ومخطوطاتك المحفوظة محلياً بأمان.</p>
+              </div>
+            </div>
+            <span className="text-[10px] px-2 py-1 rounded-md bg-[#9E4233] text-white font-mono font-bold whitespace-nowrap">محلي فقط</span>
+          </div>
+        )}
+
+        {isOnline && (
+          <div className="mb-6 p-3.5 rounded-2xl bg-[#5A5A40]/5 border border-[#5A5A40]/15 text-[#5A5A40] flex items-center justify-between gap-4 flex-row-reverse shadow-sm">
+            <div className="flex items-center gap-2 flex-row-reverse">
+              <Wifi className="w-4 h-4 text-[#5A5A40] animate-pulse shrink-0" />
+              <div className="text-right">
+                <p className="text-xs font-bold">وضع القراءة دون اتصال مفعّل تلقائياً ✔</p>
+                <p className="text-[10px] text-[#6D4C41]">جميع قراءاتك، علاماتك المرجعية، وملاحظاتك المكتوبة يتم مزامنتها وحفظها بأمان على ذاكرة جهازك الحالي.</p>
+              </div>
+            </div>
+            <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#5A5A40]/15 text-[#5A5A40] font-bold whitespace-nowrap">حفظ ذاتي نشط</span>
+          </div>
+        )}
+
         <header className="relative py-8 px-6 text-center rounded-3xl bg-gradient-to-b from-[#FAF5EC] to-[#F5F0E6] border border-[#E6E0D4] shadow-sm mb-10 overflow-hidden">
           {/* Nubian geometric background pattern decoration */}
           <div className="absolute inset-0 bg-[radial-gradient(#C84B31_0.5px,transparent_0.5px)] [background-size:16px_16px] opacity-10 pointer-events-none"></div>
@@ -342,23 +501,27 @@ export default function LibraryShelf({
 
             {/* Quick stats shelf overview */}
             <div className="flex flex-wrap items-center justify-center gap-4 mt-6">
-              <button
-                id="add_drive_link_modal_btn"
-                onClick={() => runAdminProtectedAction(() => setShowAddModal(true))}
-                className="flex items-center gap-2 px-4.5 py-2 rounded-xl text-xs font-semibold bg-[#5A5A40] text-white hover:bg-[#4A4A32] transition-all shadow-sm"
-              >
-                {isAdmin ? <Plus className="w-4 h-4" /> : <Lock className="w-3.5 h-3.5 opacity-80" />}
-                <span>إضافة كتاب من Google Drive</span>
-              </button>
+              {isAdmin && (
+                <>
+                  <button
+                    id="add_drive_link_modal_btn"
+                    onClick={() => setShowAddModal(true)}
+                    className="flex items-center gap-2 px-4.5 py-2 rounded-xl text-xs font-semibold bg-[#5A5A40] text-white hover:bg-[#4A4A32] transition-all shadow-sm"
+                  >
+                    <Plus className="w-4 h-4" />
+                    <span>إضافة كتاب من Google Drive</span>
+                  </button>
 
-              <button
-                id="upload_local_pdf_btn"
-                onClick={() => runAdminProtectedAction(() => setShowUploadModal(true))}
-                className="flex items-center gap-2 px-4.5 py-2 rounded-xl text-xs font-semibold bg-[#9E4233] text-white hover:bg-[#853428] transition-all shadow-sm"
-              >
-                {isAdmin ? <Upload className="w-4 h-4" /> : <Lock className="w-3.5 h-3.5 opacity-80" />}
-                <span>رفع كتاب محلي (PDF)</span>
-              </button>
+                  <button
+                    id="upload_local_pdf_btn"
+                    onClick={() => setShowUploadModal(true)}
+                    className="flex items-center gap-2 px-4.5 py-2 rounded-xl text-xs font-semibold bg-[#9E4233] text-white hover:bg-[#853428] transition-all shadow-sm"
+                  >
+                    <Upload className="w-4 h-4" />
+                    <span>رفع كتاب محلي (PDF)</span>
+                  </button>
+                </>
+              )}
 
               {/* Admin Mode Badge & Toggle Button */}
               {isAdmin ? (
@@ -381,22 +544,38 @@ export default function LibraryShelf({
                 </button>
               )}
 
-              <button
-                onClick={() => setShowHelp(!showHelp)}
-                className="p-2 rounded-xl border border-[#E6E0D4] bg-white text-[#6D4C41] hover:bg-[#FAF5EC] transition-all"
-                title="مساعدة وإرشادات"
-              >
-                <HelpCircle className="w-4 h-4" />
-              </button>
+              {isAdmin && (
+                <button
+                  onClick={() => setShowHelp(!showHelp)}
+                  className="p-2 rounded-xl border border-[#E6E0D4] bg-white text-[#6D4C41] hover:bg-[#FAF5EC] transition-all"
+                  title="مساعدة وإرشادات"
+                >
+                  <HelpCircle className="w-4 h-4" />
+                </button>
+              )}
 
               <button
-                id="view_supabase_schema_btn"
-                onClick={onOpenSupabaseSchema}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#E6E0D4] bg-white hover:bg-[#F5F0E6] text-xs font-medium text-neutral-600"
+                onClick={toggleFullscreen}
+                className={`p-2 rounded-xl border transition-all ${
+                  isFullscreen 
+                    ? "bg-[#5A5A40] border-[#5A5A40] text-white" 
+                    : "border-[#E6E0D4] bg-white text-[#6D4C41] hover:bg-[#FAF5EC]"
+                }`}
+                title={isFullscreen ? "إنهاء ملء الشاشة" : "ملء الشاشة بالكامل"}
               >
-                <Database className="w-3.5 h-3.5 text-[#5A5A40]" />
-                <span>جداول Supabase</span>
+                {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
               </button>
+
+              {isAdmin && (
+                <button
+                  id="view_supabase_schema_btn"
+                  onClick={onOpenSupabaseSchema}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#E6E0D4] bg-white hover:bg-[#F5F0E6] text-xs font-medium text-neutral-600"
+                >
+                  <Database className="w-3.5 h-3.5 text-[#5A5A40]" />
+                  <span>جداول Supabase</span>
+                </button>
+              )}
             </div>
           </div>
         </header>
@@ -418,6 +597,35 @@ export default function LibraryShelf({
           </div>
         )}
 
+        {/* 'Continue Reading' Section */}
+        {lastOpenedBook && (
+          <div className="mb-10 p-5 rounded-3xl bg-gradient-to-r from-[#FAF6EE] to-[#F5EFE4] border-2 border-[#D4A373]/30 shadow-md flex flex-col md:flex-row-reverse items-center justify-between gap-5 animate-fade-in">
+            <div className="flex items-center gap-4 flex-row-reverse text-right">
+              <div className="w-12 h-16 rounded shadow-md bg-gradient-to-br from-[#4A3B32] to-[#2B211C] flex items-center justify-center border border-[#FAF6EE]/20 shrink-0 overflow-hidden">
+                <span className="text-white text-[10px] font-bold font-serif line-clamp-2 px-1 text-center leading-none">
+                  {lastOpenedBook.title}
+                </span>
+              </div>
+              <div>
+                <span className="text-[10px] bg-[#9E4233]/10 text-[#9E4233] font-bold px-2.5 py-1 rounded-full">۞ متابعة القراءة</span>
+                <h3 className="font-serif font-extrabold text-sm text-[#4A3B32] mt-1.5 leading-snug">
+                  {lastOpenedBook.title}
+                </h3>
+                <p className="text-xs text-[#6D4C41] mt-0.5">
+                  تأليف: {lastOpenedBook.author} {lastOpenedPage && `• وصلت إلى صفحة ${lastOpenedPage}`}
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => onSelectBook(lastOpenedBook)}
+              className="w-full md:w-auto flex items-center justify-center gap-2 px-6 py-2.5 bg-[#9E4233] hover:bg-[#853428] text-white text-xs font-bold rounded-xl shadow-md transition-all shrink-0"
+            >
+              <BookOpen className="w-4 h-4" />
+              <span>استكمال القراءة الآن</span>
+            </button>
+          </div>
+        )}
+
         {/* 2. THE PHYSICAL WOOD SHELF SECTION */}
         <section className="mb-14">
           {/* Category Tabs */}
@@ -435,7 +643,10 @@ export default function LibraryShelf({
                 return (
                   <button
                     key={cat.id}
-                    onClick={() => setActiveTab(cat.id)}
+                    onClick={() => {
+                      setActiveTab(cat.id);
+                      setSelectedTag("all"); // Reset tag filter when category tab changes
+                    }}
                     className={`flex items-center gap-1.5 px-4 py-2 rounded-full text-xs font-bold transition-all duration-300 whitespace-nowrap select-none ${
                       isActive
                         ? "bg-[#5A5A40] text-[#FAF6EE] shadow-md border border-[#5A5A40]"
@@ -455,7 +666,46 @@ export default function LibraryShelf({
             </div>
           </div>
 
-          <h2 className="text-xl font-bold text-[#4A3B32] font-serif mb-6 flex items-center gap-2 flex-row-reverse">
+          {/* Sorting and Tagging Controls Row */}
+          <div className="mb-8 flex flex-col md:flex-row gap-4 items-center justify-between p-4 bg-[#FAF5EC]/70 rounded-2xl border border-[#E6E0D4] text-xs">
+            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end flex-row-reverse">
+              <span className="font-bold text-[#6D4C41] shrink-0">۞ خيارات التصفية والفرز:</span>
+              
+              <div className="flex items-center gap-1.5 flex-row-reverse">
+                <label className="text-[#8D7B68] font-medium whitespace-nowrap">الفرز حسب:</label>
+                <select
+                  value={sortBy}
+                  onChange={(e) => setSortBy(e.target.value as "date" | "alphabet")}
+                  className="bg-white border border-[#E6E0D4] rounded-lg px-2.5 py-1.5 text-[#4A3B32] font-semibold focus:outline-none focus:ring-1 focus:ring-[#5A5A40] cursor-pointer"
+                >
+                  <option value="date">تاريخ الإضافة (الأحدث أولاً)</option>
+                  <option value="alphabet">الترتيب الأبجدي (أ - ي)</option>
+                </select>
+              </div>
+
+              {allUniqueTags.length > 0 && (
+                <div className="flex items-center gap-1.5 flex-row-reverse">
+                  <label className="text-[#8D7B68] font-medium whitespace-nowrap">المجموعة / الوسم:</label>
+                  <select
+                    value={selectedTag}
+                    onChange={(e) => setSelectedTag(e.target.value)}
+                    className="bg-white border border-[#E6E0D4] rounded-lg px-2.5 py-1.5 text-[#4A3B32] font-semibold focus:outline-none focus:ring-1 focus:ring-[#5A5A40] cursor-pointer"
+                  >
+                    <option value="all">كل المجموعات والوسوم</option>
+                    {allUniqueTags.map(tag => (
+                      <option key={tag} value={tag}>{tag}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            <div className="text-[#8D7B68] text-[11px] font-medium text-right md:text-left w-full md:w-auto">
+              عدد الكتب المعروضة: <span className="font-bold text-[#9E4233]">{sortedAndFilteredBooks.length}</span> كتاب
+            </div>
+          </div>
+
+          <h2 className="text-xl font-bold text-[#4A3B32] font-serif mb-8 flex items-center gap-2 flex-row-reverse">
             <BookOpen className="w-5.5 h-5.5 text-[#9E4233]" />
             <span>
               {activeTab === "all" && "رفوف القراءة الخاصة بك"}
@@ -463,82 +713,103 @@ export default function LibraryShelf({
               {activeTab === "children" && "كتب للأطفال والبراعم"}
               {activeTab === "religious" && "المكتبة الإسلامية والدينية"}
               {activeTab === "general" && "الكتب العامة والروايات الأدبية"}
+              {selectedTag !== "all" && ` • مجموعة (${selectedTag})`}
             </span>
           </h2>
 
-          {books.filter(book => {
-            if (activeTab === "all") return true;
-            if (activeTab === "general") return book.category === "general" || !book.category;
-            return book.category === activeTab;
-          }).length === 0 ? (
+          {sortedAndFilteredBooks.length === 0 ? (
             <div className="text-center py-16 px-4 bg-[#FAF5EC]/40 rounded-3xl border border-[#E6E0D4] border-dashed">
               <span className="text-3xl">📭</span>
-              <p className="text-xs font-bold text-[#8D7B68] mt-3">لا توجد كتب مضافة في هذا التصنيف حالياً.</p>
+              <p className="text-xs font-bold text-[#8D7B68] mt-3">لا توجد كتب مطابقة لخيارات التصفية الحالية.</p>
               <p className="text-[11px] text-[#8D7B68]/70 mt-1">انقر على أزرار الإضافة في الأعلى لملء هذا الرف!</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-y-12 gap-x-6 md:gap-x-8">
-              {books.filter(book => {
-                if (activeTab === "all") return true;
-                if (activeTab === "general") return book.category === "general" || !book.category;
-                return book.category === activeTab;
-              }).map((book) => {
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-y-16 gap-x-6 md:gap-x-8">
+              {sortedAndFilteredBooks.map((book, idx) => {
                 const colors = getTraditionalCoverColors(book.title, book.id);
                 
+                // Determine leaning styles for books to make them look like cozy physical books
+                let leaningClass = "";
+                if (idx % 3 === 0) {
+                  // Leans slightly left
+                  leaningClass = "origin-bottom -rotate-4 hover:rotate-0 hover:scale-105 hover:-translate-y-3";
+                } else if (idx % 3 === 1) {
+                  // Leans slightly right
+                  leaningClass = "origin-bottom rotate-4 hover:rotate-0 hover:scale-105 hover:-translate-y-3";
+                } else {
+                  // Stands almost straight but tilted slightly back/left
+                  leaningClass = "origin-bottom rotate-1.5 hover:rotate-0 hover:scale-105 hover:-translate-y-3";
+                }
+
                 return (
                 <div 
                   key={book.id} 
-                  className="flex flex-col group relative"
+                  className="flex flex-col group relative pb-10"
                 >
-                  
-                  {/* The stylized 3D realistic book spine & cover cover */}
-                  <div 
-                    onClick={() => onSelectBook(book)}
-                    className="cursor-pointer relative aspect-[3/4] rounded-r-lg rounded-l-md shadow-lg hover:shadow-2xl hover:-translate-y-2.5 transition-all duration-300 transform preserve-3d overflow-hidden flex flex-col justify-between p-3.5 border-r border-[#ffffff30]"
-                  >
-                    {/* The Cover gradient and background pattern */}
-                    <div className={`absolute inset-0 ${colors.bg} z-0`}></div>
-                    {/* Ornamental Gold Motif Background */}
-                    <div className="absolute inset-2 border border-dashed border-white/20 rounded-md z-0 pointer-events-none"></div>
-                    <div className="absolute top-2 right-2 left-2 h-[1px] bg-gradient-to-r from-transparent via-white/30 to-transparent"></div>
+                  {/* Container of book cover standing on top of the shelf */}
+                  <div className="relative aspect-[3/4] w-full z-10">
+                    {/* The stylized 3D realistic book spine & cover cover */}
+                    <div 
+                      onClick={() => onSelectBook(book)}
+                      className={`cursor-pointer absolute inset-0 rounded-r-lg rounded-l-md shadow-lg hover:shadow-2xl transition-all duration-300 transform preserve-3d overflow-hidden flex flex-col justify-between p-3.5 border-r border-[#ffffff30] z-10 ${leaningClass}`}
+                    >
+                      {/* The Cover gradient and background pattern */}
+                      <div className={`absolute inset-0 ${colors.bg} z-0`}></div>
+                      {/* Ornamental Gold Motif Background */}
+                      <div className="absolute inset-2 border border-dashed border-white/20 rounded-md z-0 pointer-events-none"></div>
+                      <div className="absolute top-2 right-2 left-2 h-[1px] bg-gradient-to-r from-transparent via-white/30 to-transparent"></div>
 
-                    {/* Left Spine Thickness Shader for 3D Feel */}
-                    <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-r from-black/50 to-transparent z-10"></div>
-                    <div className="absolute left-[3px] top-0 bottom-0 w-[1px] bg-white/20 z-10"></div>
+                      {/* Left Spine Thickness Shader for 3D Feel */}
+                      <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-r from-black/50 to-transparent z-10"></div>
+                      <div className="absolute left-[3px] top-0 bottom-0 w-[1px] bg-white/20 z-10"></div>
 
-                    {/* Cover Content Overlay */}
-                    <div className="relative z-10 flex-1 flex flex-col justify-between">
-                      
-                      {/* Top banner / Sudanese pattern */}
-                      <div className={`py-1 px-1.5 rounded-md text-center ${colors.banner} text-[9px] font-bold tracking-wider ${colors.text} truncate uppercase max-w-full`}>
-                        {book.isCustom ? (book.fileSize ? `ملف محلي • ${book.fileSize}` : "رابط سحابي") : "مخطوطة عريقة"}
-                      </div>
-
-                      {/* Center Title */}
-                      <div className="my-auto text-center py-2 px-1">
-                        <p className="font-serif font-extrabold text-xs md:text-sm text-amber-100 leading-snug tracking-wide line-clamp-3">
-                          {book.title}
-                        </p>
-                        <p className="text-[10px] text-amber-200/80 mt-1.5 line-clamp-1 italic">
-                          {book.author}
-                        </p>
-                      </div>
-
-                      {/* Decorative medallion badge at the bottom */}
-                      <div className="mx-auto mt-2 text-center">
-                        <div className={`w-7 h-7 rounded-full border ${colors.accent} flex items-center justify-center bg-black/10 text-amber-300/60`}>
-                          <span className="text-[9px] font-mono">۞</span>
+                      {/* Cover Content Overlay */}
+                      <div className="relative z-10 flex-1 flex flex-col justify-between">
+                        
+                        {/* Top banner / Sudanese pattern */}
+                        <div className={`py-1 px-1.5 rounded-md text-center ${colors.banner} text-[9px] font-bold tracking-wider ${colors.text} truncate uppercase max-w-full`}>
+                          {book.isCustom ? (book.fileSize ? `ملف محلي • ${book.fileSize}` : "رابط سحابي") : "مخطوطة عريقة"}
                         </div>
+
+                        {/* Center Title */}
+                        <div className="my-auto text-center py-2 px-1">
+                          <p className="font-serif font-extrabold text-xs md:text-sm text-amber-100 leading-snug tracking-wide line-clamp-3">
+                            {book.title}
+                          </p>
+                          <p className="text-[10px] text-amber-200/80 mt-1.5 line-clamp-1 italic">
+                            {book.author}
+                          </p>
+                        </div>
+
+                        {/* Decorative medallion badge at the bottom */}
+                        <div className="mx-auto mt-2 text-center">
+                          <div className={`w-7 h-7 rounded-full border ${colors.accent} flex items-center justify-center bg-black/10 text-amber-300/60`}>
+                            <span className="text-[9px] font-mono">۞</span>
+                          </div>
+                        </div>
+
                       </div>
 
+                      {/* Book pages physical thickness edge shader (on the right) */}
+                      <div className="absolute right-0 top-0 bottom-0 w-1 bg-gradient-to-l from-white/30 to-transparent z-10"></div>
                     </div>
 
-                    {/* Book pages physical thickness edge shader (on the right) */}
-                    <div className="absolute right-0 top-0 bottom-0 w-1 bg-gradient-to-l from-white/30 to-transparent z-10"></div>
+                    {/* Continuous 3D heavy acacia wooden shelf running directly underneath the standing books */}
+                    <div className="absolute bottom-[-14px] left-[-12px] right-[-12px] md:left-[-16px] md:right-[-16px] h-6 bg-gradient-to-b from-[#A05C3F] via-[#7B3F27] to-[#4A2010] rounded-sm shadow-[0_12px_18px_rgba(0,0,0,0.55),0_3px_5px_rgba(0,0,0,0.25)] z-0 border-b border-black/50">
+                      {/* 3D Top bevel surface of the shelf */}
+                      <div className="absolute top-0 left-0 right-0 h-[4px] bg-[#C18260] opacity-80 border-b border-black/25"></div>
+                      {/* Subtle organic wood grain texture lines */}
+                      <div className="absolute inset-0 bg-repeat-x bg-[linear-gradient(90deg,rgba(255,255,255,0.06)_1px,transparent_1px)] [background-size:25px_100%] opacity-25"></div>
+                      {/* Soft side drop-shadows to blend connected shelves */}
+                      <div className="absolute top-0 bottom-0 left-0 w-3 bg-gradient-to-r from-black/35 to-transparent"></div>
+                      <div className="absolute top-0 bottom-0 right-0 w-3 bg-gradient-to-l from-black/35 to-transparent"></div>
+                      {/* Depth shading on the wall below */}
+                      <div className="absolute top-6 left-2 right-2 h-3 bg-black/45 blur-[3px] rounded-full pointer-events-none"></div>
+                    </div>
                   </div>
 
-                  {/* Book Metadata & Deletion Below shelf */}
-                  <div className="mt-3 text-right">
+                  {/* Book Metadata & Deletion placed elegantly BELOW the wooden shelf */}
+                  <div className="mt-8 text-right z-10 px-1">
                     <h3 className="font-bold text-xs line-clamp-1 text-[#4A3B32]">
                       {book.title}
                     </h3>
@@ -546,46 +817,72 @@ export default function LibraryShelf({
                       {book.author}
                     </p>
                     
-                    <div className="flex items-center justify-start gap-3 mt-2">
-                      <button
-                        onClick={(e) => handleOpenEditModal(e, book)}
-                        className="inline-flex items-center gap-1 text-[10px] font-bold text-[#5A5A40] hover:text-[#4A3B32] transition-all bg-[#5A5A40]/10 hover:bg-[#5A5A40]/20 px-2 py-1 rounded shadow-sm"
-                        title="تعديل تفاصيل الكتاب"
-                      >
-                        {isAdmin ? <Edit className="w-3.5 h-3.5" /> : <Lock className="w-3 h-3 text-[#5A5A40]/70" />}
-                        <span>تعديل</span>
-                      </button>
-
-                      {/* Custom books have delete option */}
-                      {book.isCustom && (
+                    {/* Display tags if present */}
+                    {book.tags && book.tags.length > 0 && (
+                      <div className="flex flex-wrap gap-1 justify-end mt-1.5">
+                        {book.tags.map((tag, tIdx) => (
+                          <span key={tIdx} className="text-[9px] bg-[#5A5A40]/10 text-[#5A5A40] px-1.5 py-0.5 rounded-md font-bold">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+                    
+                    {isAdmin && (
+                      <div className="flex items-center justify-start gap-3 mt-2.5">
                         <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            runAdminProtectedAction(() => {
-                              if (confirm(`هل أنت متأكد من رغبتك في حذف كتاب "${book.title}" من رفوف مكتبتك؟`)) {
-                                onDeleteBook(book.id);
-                              }
-                            });
-                          }}
-                          className="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 hover:text-red-800 transition-all bg-red-50 hover:bg-red-100 px-2 py-1 rounded shadow-sm"
-                          title="حذف هذا المجلد"
+                          onClick={(e) => handleOpenEditModal(e, book)}
+                          className="inline-flex items-center gap-1 text-[10px] font-bold text-[#5A5A40] hover:text-[#4A3B32] transition-all bg-[#5A5A40]/10 hover:bg-[#5A5A40]/20 px-2 py-1 rounded shadow-sm"
+                          title="تعديل تفاصيل الكتاب"
                         >
-                          {isAdmin ? <Trash2 className="w-3.5 h-3.5" /> : <Lock className="w-3 h-3 text-red-400" />}
-                          <span>حذف</span>
+                          <Edit className="w-3.5 h-3.5" />
+                          <span>تعديل</span>
                         </button>
-                      )}
-                    </div>
-                  </div>
 
-                  {/* Physical Acacia Wooden Plank under each book row */}
-                  <div className="absolute -bottom-6 left-[-10px] right-[-10px] h-3.5 bg-gradient-to-b from-[#6D4C41] to-[#4A3B32] rounded-full shadow-md z-[-1] border-b border-black/20">
-                    <div className="absolute inset-0 bg-repeat-x bg-[linear-gradient(90deg,rgba(255,255,255,0.05)_1px,transparent_1px)] [background-size:20px_100%] opacity-20"></div>
+                        {confirmDeleteId === book.id ? (
+                          <div className="flex items-center gap-1 bg-red-50 p-1 rounded border border-red-200" onClick={(e) => e.stopPropagation()}>
+                            <span className="text-[9px] text-red-700 font-bold">تأكيد؟</span>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onDeleteBook(book.id);
+                                setConfirmDeleteId(null);
+                              }}
+                              className="text-[9px] font-bold text-white bg-red-600 hover:bg-red-700 px-1.5 py-0.5 rounded shadow"
+                            >
+                              نعم
+                            </button>
+                            <button
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                setConfirmDeleteId(null);
+                              }}
+                              className="text-[9px] font-bold text-gray-700 bg-gray-200 hover:bg-gray-300 px-1.5 py-0.5 rounded shadow"
+                            >
+                              لا
+                            </button>
+                          </div>
+                        ) : (
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setConfirmDeleteId(book.id);
+                            }}
+                            className="inline-flex items-center gap-1 text-[10px] font-bold text-red-600 hover:text-red-800 transition-all bg-red-50 hover:bg-red-100 px-2 py-1 rounded shadow-sm"
+                            title="حذف هذا المجلد"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                            <span>حذف</span>
+                          </button>
+                        )}
+                      </div>
+                    )}
                   </div>
 
                 </div>
-              );
-            })}
-          </div>
+                );
+              })}
+            </div>
           )}
         </section>
       </div>
@@ -682,6 +979,17 @@ export default function LibraryShelf({
                 />
               </div>
 
+              <div>
+                <label className="block text-xs font-bold text-[#4A3B32] mb-1.5">المجموعات / الوسوم (تفصل بفواصل ، أو ,)</label>
+                <input 
+                  type="text" 
+                  value={newTagsStr}
+                  onChange={(e) => setNewTagsStr(e.target.value)}
+                  placeholder="مثال: رواية، سوداني، أدب عريق"
+                  className="w-full p-2.5 text-xs rounded-xl border border-neutral-300 focus:ring-1 focus:ring-[#5A5A40] outline-none"
+                />
+              </div>
+
               <div className="flex gap-3 pt-3">
                 <button
                   type="button"
@@ -773,6 +1081,17 @@ export default function LibraryShelf({
                   value={editDesc}
                   onChange={(e) => setEditDesc(e.target.value)}
                   rows={2}
+                  className="w-full p-2.5 text-xs rounded-xl border border-neutral-300 focus:ring-1 focus:ring-[#5A5A40] outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#4A3B32] mb-1.5">المجموعات / الوسوم (تفصل بفواصل ، أو ,)</label>
+                <input 
+                  type="text" 
+                  value={editTagsStr}
+                  onChange={(e) => setEditTagsStr(e.target.value)}
+                  placeholder="مثال: رواية، سوداني، أدب عريق"
                   className="w-full p-2.5 text-xs rounded-xl border border-neutral-300 focus:ring-1 focus:ring-[#5A5A40] outline-none"
                 />
               </div>
@@ -907,6 +1226,17 @@ export default function LibraryShelf({
                   onChange={(e) => setUploadDesc(e.target.value)}
                   placeholder="اكتب خلاصة أو فكرة عامة عن هذا الكتاب ليرى القراء ملخصاً عنه..."
                   rows={2}
+                  className="w-full p-2.5 text-xs rounded-xl border border-neutral-300 focus:ring-1 focus:ring-[#5A5A40] outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#4A3B32] mb-1.5">المجموعات / الوسوم (تفصل بفواصل ، أو ,)</label>
+                <input 
+                  type="text" 
+                  value={uploadTagsStr}
+                  onChange={(e) => setUploadTagsStr(e.target.value)}
+                  placeholder="مثال: منهج، رياضيات، الصف السادس"
                   className="w-full p-2.5 text-xs rounded-xl border border-neutral-300 focus:ring-1 focus:ring-[#5A5A40] outline-none"
                 />
               </div>

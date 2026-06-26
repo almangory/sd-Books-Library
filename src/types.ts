@@ -9,6 +9,7 @@ export interface Book {
   fileSize?: string;
   addedAt: number;
   category?: string; // e.g. "curriculum", "children", "religious", "general"
+  tags?: string[];
 }
 
 export interface Bookmark {

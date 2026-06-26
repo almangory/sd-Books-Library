@@ -6,96 +6,7 @@ import SupabaseRequirements from "./components/SupabaseRequirements";
 import { LogOut, X, AlertCircle } from "lucide-react";
 
 // Curated default books representing traditional Sudanese literature, history, and education.
-const DEFAULT_BOOKS: Book[] = [
-  {
-    id: "def_1",
-    title: "موسم الهجرة إلى الشمال",
-    author: "الطيب صالح",
-    description: "تعتبر هذه الرواية التاريخية الخالدة واحدة من أفضل مئة رواية عربية في القرن العشرين، حيث توازن ببراعة وثقافة فلسفية نادرة بين صراع الشرق والغرب، والبحث عن الذات على ضفاف نهر النيل المعطاء.",
-    pdfUrl: "https://raw.githubusercontent.com/mozilla/pdf.js/master/web/compressed.tracemonkey-pldi-09.pdf",
-    coverUrl: "",
-    isCustom: false,
-    addedAt: Date.now() - 8000,
-    category: "general"
-  },
-  {
-    id: "def_2",
-    title: "كتاب الجغرافيا - الصف الثالث الثانوي",
-    author: "وزارة التربية والتعليم السودانية",
-    description: "كتاب الجغرافيا المعتمد لطلاب الشهادة الثانوية بجمهورية السودان، يغطي المظاهر الطبيعية والبشرية والاقتصادية بالتفصيل.",
-    pdfUrl: "https://raw.githubusercontent.com/mozilla/pdf.js/master/web/compressed.tracemonkey-pldi-09.pdf",
-    coverUrl: "",
-    isCustom: false,
-    addedAt: Date.now() - 7000,
-    category: "curriculum"
-  },
-  {
-    id: "def_3",
-    title: "ديوان عيون الشعر السوداني الكلاسيكي",
-    author: "الهادي آدم وآخرون",
-    description: "مجموعة أنيقة تضم روائع القصائد السودانية الخالدة المليئة بالحنين وعشق التراب والأرض ونبض الهوية والمفردة السودانية الدافئة العذبة.",
-    pdfUrl: "https://raw.githubusercontent.com/mozilla/pdf.js/master/web/compressed.tracemonkey-pldi-09.pdf",
-    coverUrl: "",
-    isCustom: false,
-    addedAt: Date.now() - 6000,
-    category: "general"
-  },
-  {
-    id: "def_4",
-    title: "حكايات جدتي فاطمة للأطفال",
-    author: "عبد الله الطيب",
-    description: "قصص وحكايات تراثية مشوقة للأطفال والناشئة مستوحاة من عمق التراث والثقافة السودانية الجميلة، لزرع القيم والأخلاق الحميدة.",
-    pdfUrl: "https://raw.githubusercontent.com/mozilla/pdf.js/master/web/compressed.tracemonkey-pldi-09.pdf",
-    coverUrl: "",
-    isCustom: false,
-    addedAt: Date.now() - 5000,
-    category: "children"
-  },
-  {
-    id: "def_5",
-    title: "منهج التربية الإسلامية - الصف الثامن",
-    author: "وزارة التربية والتعليم السودانية",
-    description: "كتاب الطالب لمقرر التربية الإسلامية للصف الثامن الأساسي، يتضمن السيرة النبوية العطرة، الأخلاق الإسلامية، وأحكام التلاوة والقرآن الكريم.",
-    pdfUrl: "https://raw.githubusercontent.com/mozilla/pdf.js/master/web/compressed.tracemonkey-pldi-09.pdf",
-    coverUrl: "",
-    isCustom: false,
-    addedAt: Date.now() - 4000,
-    category: "curriculum"
-  },
-  {
-    id: "def_6",
-    title: "رياض الصالحين للناشئة والأطفال",
-    author: "تبسيط الشيوخ الأجلاء",
-    description: "أحاديث نبوية شريفة منتقاة بعناية للأطفال واليافعين، مشروحة بأسلوب مبسط ومحبب يناسب المدارك الحديثة لتنشئة جيل ملتزم.",
-    pdfUrl: "https://raw.githubusercontent.com/mozilla/pdf.js/master/web/compressed.tracemonkey-pldi-09.pdf",
-    coverUrl: "",
-    isCustom: false,
-    addedAt: Date.now() - 3000,
-    category: "religious"
-  },
-  {
-    id: "def_7",
-    title: "الخلاصة الشافية في علم العقيدة والتصوف",
-    author: "الشيخ محمد أحمد الصائم",
-    description: "مخطوط ديني مبسط يتناول مبادئ العقيدة الإسلامية السليمة وتزكية النفوس والسلوك الروحي القويم المستمد من الكتاب والسنة.",
-    pdfUrl: "https://raw.githubusercontent.com/mozilla/pdf.js/master/web/compressed.tracemonkey-pldi-09.pdf",
-    coverUrl: "",
-    isCustom: false,
-    addedAt: Date.now() - 2000,
-    category: "religious"
-  },
-  {
-    id: "def_8",
-    title: "قصص الأنبياء المصورة للبراعم",
-    author: "أحمد بهجت",
-    description: "سلسلة قصص الأنبياء بأسلوب ميسر وصور توضيحية لتعريف البراعم بمسيرة الرسل عليهم السلام بأسلوب قصصي تفاعلي رائع.",
-    pdfUrl: "https://raw.githubusercontent.com/mozilla/pdf.js/master/web/compressed.tracemonkey-pldi-09.pdf",
-    coverUrl: "",
-    isCustom: false,
-    addedAt: Date.now() - 1000,
-    category: "children"
-  }
-];
+const DEFAULT_BOOKS: Book[] = [];
 
 export default function App() {
   const [view, setView] = useState<"shelf" | "reader" | "supabase">("shelf");
@@ -106,9 +17,10 @@ export default function App() {
   });
   
   const [adminPassword, setAdminPassword] = useState<string>("20302060");
+  const [isOnline, setIsOnline] = useState<boolean>(() => typeof navigator !== "undefined" ? navigator.onLine : true);
 
   const [books, setBooks] = useState<Book[]>(() => {
-    const saved = localStorage.getItem("flipbook_persisted_books_v1");
+    const saved = localStorage.getItem("flipbook_persisted_books_v2");
     if (saved) {
       try {
         return JSON.parse(saved);
@@ -118,6 +30,21 @@ export default function App() {
     }
     return DEFAULT_BOOKS;
   });
+
+  // Monitor network status
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const handleOnline = () => setIsOnline(true);
+    const handleOffline = () => setIsOnline(false);
+
+    window.addEventListener("online", handleOnline);
+    window.addEventListener("offline", handleOffline);
+
+    return () => {
+      window.removeEventListener("online", handleOnline);
+      window.removeEventListener("offline", handleOffline);
+    };
+  }, []);
 
   // Load Admin Password and Books from Supabase on mount
   useEffect(() => {
@@ -182,8 +109,8 @@ export default function App() {
 
   // Persist books changes to local storage as fallback
   useEffect(() => {
-    if (books && books.length > 0) {
-      localStorage.setItem("flipbook_persisted_books_v1", JSON.stringify(books));
+    if (books) {
+      localStorage.setItem("flipbook_persisted_books_v2", JSON.stringify(books));
     }
   }, [books]);
 
@@ -227,6 +154,67 @@ export default function App() {
   }, []);
 
   const [showExitConfirm, setShowExitConfirm] = useState<boolean>(false);
+  const [isExiting, setIsExiting] = useState<boolean>(false);
+
+  // Set up browser history navigation (History API) to handle mobile back button smoothly
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+
+    // Push base guard states if history doesn't contain them
+    if (!window.history.state) {
+      window.history.replaceState({ view: "shelf_base" }, "");
+      window.history.pushState({ view: "shelf" }, "");
+    }
+
+    const handlePopState = (event: PopStateEvent) => {
+      if (isExiting) return;
+
+      const state = event.state;
+      if (state) {
+        if (state.view === "reader") {
+          setView("reader");
+          if (state.bookId) {
+            const foundBook = books.find(b => b.id === state.bookId);
+            if (foundBook) setSelectedBook(foundBook);
+          }
+        } else if (state.view === "supabase") {
+          setView("supabase");
+        } else if (state.view === "shelf") {
+          setView("shelf");
+          setSelectedBook(null);
+          setSettings(prev => ({ ...prev, readingMode: false }));
+        } else if (state.view === "shelf_base") {
+          // Guard state popped - user wants to exit from the library screen
+          setShowExitConfirm(true);
+          // Re-push shelf state to lock the browser page and await confirmation
+          window.history.pushState({ view: "shelf" }, "");
+        }
+      } else {
+        // Fallback guard
+        setShowExitConfirm(true);
+        window.history.pushState({ view: "shelf" }, "");
+      }
+    };
+
+    window.addEventListener("popstate", handlePopState);
+    return () => {
+      window.removeEventListener("popstate", handlePopState);
+    };
+  }, [books, isExiting]);
+
+  // Alert before unloading tab (reloads/closing page)
+  useEffect(() => {
+    const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+      if (isExiting) return;
+      const message = "هل أنت متأكد من المغادرة؟";
+      e.returnValue = message;
+      return message;
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+    return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
+    };
+  }, [isExiting]);
 
   const handleAdminLogin = (passwordEntered: string): boolean => {
     if (passwordEntered === adminPassword) {
@@ -292,12 +280,27 @@ export default function App() {
   };
 
   const handleBackToLibrary = () => {
-    setView("shelf");
-    setSelectedBook(null);
-    setSettings(prev => ({ ...prev, readingMode: false }));
+    if (window.history.state && window.history.state.view !== "shelf_base" && window.history.state.view !== "shelf") {
+      window.history.back();
+    } else {
+      setView("shelf");
+      setSelectedBook(null);
+      setSettings(prev => ({ ...prev, readingMode: false }));
+    }
   };
 
   const handleSelectBook = async (book: Book) => {
+    // Attempt automatic full screen on reader activation
+    try {
+      if (!document.fullscreenElement && document.documentElement.requestFullscreen) {
+        document.documentElement.requestFullscreen().catch((err) => {
+          console.warn("Fullscreen auto-request was blocked/denied:", err);
+        });
+      }
+    } catch (fsErr) {
+      console.warn("Fullscreen auto-request not supported in this frame:", fsErr);
+    }
+
     try {
       const { getCachedBookBlob } = await import("./utils/indexedDB");
       if (typeof getCachedBookBlob === "function") {
@@ -309,6 +312,7 @@ export default function App() {
           const freshBlobUrl = URL.createObjectURL(cachedBlob);
           setSelectedBook({ ...book, pdfUrl: freshBlobUrl });
           setView("reader");
+          window.history.pushState({ view: "reader", bookId: book.id }, "");
           return;
         }
       }
@@ -318,6 +322,7 @@ export default function App() {
     
     setSelectedBook(book);
     setView("reader");
+    window.history.pushState({ view: "reader", bookId: book.id }, "");
   };
 
   return (
@@ -349,11 +354,15 @@ export default function App() {
           onAddBook={handleAddBook}
           onDeleteBook={handleDeleteBook}
           onUpdateBook={handleUpdateBook}
-          onOpenSupabaseSchema={() => setView("supabase")}
+          onOpenSupabaseSchema={() => {
+            setView("supabase");
+            window.history.pushState({ view: "supabase" }, "");
+          }}
           isAdmin={isAdmin}
           onAdminLogin={handleAdminLogin}
           onAdminLogout={handleAdminLogout}
           adminPassword={adminPassword}
+          isOnline={isOnline}
         />
       )}
 
@@ -367,7 +376,13 @@ export default function App() {
       )}
 
       {view === "supabase" && (
-        <SupabaseRequirements onBack={() => setView("shelf")} />
+        <SupabaseRequirements onBack={() => {
+          if (window.history.state && window.history.state.view !== "shelf_base" && window.history.state.view !== "shelf") {
+            window.history.back();
+          } else {
+            setView("shelf");
+          }
+        }} />
       )}
 
       {showExitConfirm && (
@@ -389,8 +404,14 @@ export default function App() {
               </button>
               <button
                 onClick={() => {
+                  setIsExiting(true);
                   setShowExitConfirm(false);
                   alert("تم الخروج الآمن.");
+                  // Exit by moving out of the guarded history states
+                  window.history.go(-2);
+                  setTimeout(() => {
+                    window.location.href = "about:blank";
+                  }, 150);
                 }}
                 className="flex-1 py-2.5 rounded-xl bg-[#9E4233] hover:bg-[#853225] text-xs font-bold text-white"
               >
