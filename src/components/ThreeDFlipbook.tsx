@@ -400,11 +400,22 @@ export default function ThreeDFlipbook({
       try {
         let pdfSource: any = book.pdfUrl;
 
-        // If we have a stored Blob (custom files uploaded locally or cached)
-        if (book.isCustom && book.pdfUrl && book.pdfUrl.startsWith("blob:")) {
-          // It's a local object URL
-          pdfSource = book.pdfUrl;
-        } else if (typeof pdfSource === "string") {
+        // 1. Check if we have a locally cached IndexedDB Blob first (takes priority!)
+        if (book.isCustom) {
+          try {
+            const { getCachedBookBlob } = await import("../utils/indexedDB");
+            const cachedBlob = await getCachedBookBlob(book.id);
+            if (cachedBlob) {
+              const arrayBuffer = await cachedBlob.arrayBuffer();
+              pdfSource = new Uint8Array(arrayBuffer);
+              console.log("Successfully loaded custom book from local IndexedDB cache!");
+            }
+          } catch (dbError) {
+            console.warn("Could not retrieve book from local IndexedDB cache:", dbError);
+          }
+        }
+
+        if (typeof pdfSource === "string" && !pdfSource.startsWith("blob:")) {
           // Check if it's a Google Drive URL
           const driveMatch = pdfSource.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) ||
                              pdfSource.match(/id=([a-zA-Z0-9_-]+)/) ||
@@ -422,8 +433,62 @@ export default function ThreeDFlipbook({
 
         setLoadingProgress(30);
         
-        // Load document using standard parameter object
-        const loadingTask = pdfjsLib.getDocument({ url: pdfSource });
+        let loadingTask: any;
+
+        // If pdfSource is the local backend proxy, try it first. If it fails, fallback to CORS bypass.
+        if (typeof pdfSource === "string" && pdfSource.startsWith("/api/proxy-pdf")) {
+          const fileId = pdfSource.split("?id=")[1];
+          try {
+            console.log("Attempting to load PDF via local Express proxy:", pdfSource);
+            const proxyResponse = await fetch(pdfSource);
+            if (proxyResponse.ok) {
+              const arrayBuffer = await proxyResponse.arrayBuffer();
+              loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
+            } else {
+              throw new Error(`Proxy status: ${proxyResponse.status}`);
+            }
+          } catch (proxyError) {
+            console.warn("Express proxy failed (likely running on static host like Vercel). Trying AllOrigins public CORS proxy fallback...", proxyError);
+            
+            // AllOrigins free public CORS proxy fallback
+            const targetUrl = `https://drive.usercontent.google.com/download?id=${fileId}&export=download`;
+            const corsProxyUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(targetUrl)}`;
+            
+            try {
+              const corsResponse = await fetch(corsProxyUrl);
+              if (corsResponse.ok) {
+                const arrayBuffer = await corsResponse.arrayBuffer();
+                loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
+              } else {
+                throw new Error(`CORS proxy status: ${corsResponse.status}`);
+              }
+            } catch (corsError) {
+              console.warn("Primary CORS proxy failed, trying classic endpoint via CORS proxy...");
+              
+              const classicUrl = `https://docs.google.com/uc?export=download&id=${fileId}`;
+              const classicCorsUrl = `https://api.allorigins.win/raw?url=${encodeURIComponent(classicUrl)}`;
+              
+              try {
+                const classicCorsResponse = await fetch(classicCorsUrl);
+                if (classicCorsResponse.ok) {
+                  const arrayBuffer = await classicCorsResponse.arrayBuffer();
+                  loadingTask = pdfjsLib.getDocument({ data: new Uint8Array(arrayBuffer) });
+                } else {
+                  throw new Error(`Classic CORS proxy status: ${classicCorsResponse.status}`);
+                }
+              } catch (lastError) {
+                throw new Error("لم نتمكن من الاتصال بالملف عبر خادم البروكسي أو قوقل درايف. تأكد من أن إذن الملف في قوقل درايف متاح لـ 'أي شخص لديه الرابط'.");
+              }
+            }
+          }
+        } else {
+          // Standard URL or direct Uint8Array
+          if (typeof pdfSource === "string") {
+            loadingTask = pdfjsLib.getDocument({ url: pdfSource });
+          } else {
+            loadingTask = pdfjsLib.getDocument({ data: pdfSource });
+          }
+        }
         
         loadingTask.onProgress = (progressData: { loaded: number; total: number }) => {
           if (progressData.total > 0) {

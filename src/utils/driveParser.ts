@@ -27,8 +27,8 @@ export function getGoogleDriveDirectLink(url: string): string {
   }
   
   if (fileId) {
-    // Return direct proxy link to bypass CORS via our Express backend
-    return `/api/proxy-pdf?id=${fileId}`;
+    // Return standard, clean shareable Google Drive link to store in database
+    return `https://drive.google.com/file/d/${fileId}/view`;
   }
   
   return trimmed;

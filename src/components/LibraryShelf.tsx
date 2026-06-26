@@ -62,6 +62,15 @@ export default function LibraryShelf({
   const [newCategory, setNewCategory] = useState<string>("general");
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
+  // States for uploading local files (Stored in IndexedDB)
+  const [showUploadModal, setShowUploadModal] = useState<boolean>(false);
+  const [uploadTitle, setUploadTitle] = useState<string>("");
+  const [uploadAuthor, setUploadAuthor] = useState<string>("");
+  const [uploadDesc, setUploadDesc] = useState<string>("");
+  const [uploadCategory, setUploadCategory] = useState<string>("general");
+  const [uploadFile, setUploadFile] = useState<File | null>(null);
+  const [isUploading, setIsUploading] = useState<boolean>(false);
+
   // States for editing book details
   const [showEditModal, setShowEditModal] = useState<boolean>(false);
   const [editingBook, setEditingBook] = useState<Book | null>(null);
@@ -116,6 +125,70 @@ export default function LibraryShelf({
     setNewDesc("");
     setNewCategory("general");
     setShowAddModal(false);
+  };
+
+  // Form submission handler for local file upload to IndexedDB
+  const handleLocalFileUpload = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setErrorMsg(null);
+
+    if (!uploadTitle.trim() || !uploadAuthor.trim() || !uploadFile) {
+      setErrorMsg("الرجاء تحديد ملف PDF وكتابة العنوان والكاتب.");
+      return;
+    }
+
+    if (uploadFile.type !== "application/pdf" && !uploadFile.name.toLowerCase().endsWith(".pdf")) {
+      setErrorMsg("الملف المحدد ليس ملف PDF صالح. يرجى اختيار ملف PDF فقط.");
+      return;
+    }
+
+    try {
+      setIsUploading(true);
+      const bookId = "local_" + Math.random().toString(36).substr(2, 9);
+      
+      // Cache file blob in IndexedDB
+      await cacheBookBlob(bookId, uploadFile);
+
+      // Create local object URL for preview (or standard fallback)
+      const blobUrl = URL.createObjectURL(uploadFile);
+
+      // Helper to convert bytes to human-readable size
+      const formatBytes = (bytes: number) => {
+        if (bytes === 0) return "0 Bytes";
+        const k = 1024;
+        const sizes = ["Bytes", "KB", "MB", "GB"];
+        const i = Math.floor(Math.log(bytes) / Math.log(k));
+        return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i];
+      };
+
+      const localBook: Book = {
+        id: bookId,
+        title: uploadTitle.trim(),
+        author: uploadAuthor.trim(),
+        description: uploadDesc.trim() || "ملف كتاب محلي تم رفعه وحفظه في ذاكرة المتصفح.",
+        pdfUrl: blobUrl,
+        coverUrl: "",
+        isCustom: true,
+        addedAt: Date.now(),
+        category: uploadCategory,
+        fileSize: formatBytes(uploadFile.size)
+      };
+
+      onAddBook(localBook);
+
+      // Reset
+      setUploadTitle("");
+      setUploadAuthor("");
+      setUploadDesc("");
+      setUploadCategory("general");
+      setUploadFile(null);
+      setShowUploadModal(false);
+    } catch (err: any) {
+      console.error("Local file cache error:", err);
+      setErrorMsg(`حدث خطأ أثناء حفظ الملف محلياً: ${err.message || err}`);
+    } finally {
+      setIsUploading(false);
+    }
   };
   
   // Helper to run action if admin, otherwise open admin password prompt first
@@ -276,6 +349,15 @@ export default function LibraryShelf({
               >
                 {isAdmin ? <Plus className="w-4 h-4" /> : <Lock className="w-3.5 h-3.5 opacity-80" />}
                 <span>إضافة كتاب من Google Drive</span>
+              </button>
+
+              <button
+                id="upload_local_pdf_btn"
+                onClick={() => runAdminProtectedAction(() => setShowUploadModal(true))}
+                className="flex items-center gap-2 px-4.5 py-2 rounded-xl text-xs font-semibold bg-[#9E4233] text-white hover:bg-[#853428] transition-all shadow-sm"
+              >
+                {isAdmin ? <Upload className="w-4 h-4" /> : <Lock className="w-3.5 h-3.5 opacity-80" />}
+                <span>رفع كتاب محلي (PDF)</span>
               </button>
 
               {/* Admin Mode Badge & Toggle Button */}
@@ -711,6 +793,150 @@ export default function LibraryShelf({
                   className="flex-1 py-2.5 rounded-xl bg-[#5A5A40] hover:bg-[#4A4A32] text-xs font-bold text-white transition-colors"
                 >
                   حفظ التعديلات
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* 5. MODAL FOR UPLOADING LOCAL PDF FILE (SAVED IN INDEXEDDB) */}
+      {showUploadModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+          <div className="w-full max-w-md p-6 rounded-2xl bg-white border border-[#E6E0D4] shadow-2xl text-right animate-fadeIn">
+            
+            <h3 className="text-lg font-bold text-[#4A3B32] font-serif mb-1 flex items-center gap-2 justify-end">
+              <span>رفع كتاب محلي وتخزينه بالمتصفح</span>
+              <Upload className="w-5 h-5 text-[#9E4233]" />
+            </h3>
+            <p className="text-xs text-[#8D7B68] mb-5 leading-relaxed">
+              سيتم حفظ هذا الملف بالكامل وبشكل آمن داخل متصفحك (IndexedDB)، لفتحه فوراً حتى دون إنترنت وبشكل فائق السرعة وبدون قيود CORS.
+            </p>
+
+            {errorMsg && (
+              <div className="p-3 mb-4 rounded-xl bg-red-50 border border-red-200 text-xs text-red-600 flex items-center gap-2 justify-end">
+                <span>{errorMsg}</span>
+                <AlertCircle className="w-4 h-4 shrink-0" />
+              </div>
+            )}
+
+            <form onSubmit={handleLocalFileUpload} className="space-y-4">
+              <div>
+                <label className="block text-xs font-bold text-[#4A3B32] mb-1.5">ملف الكتاب (PDF)</label>
+                <div 
+                  className={`border-2 border-dashed rounded-xl p-4 text-center cursor-pointer transition-colors ${
+                    uploadFile ? "border-emerald-500 bg-emerald-50/20" : "border-neutral-300 hover:border-[#5A5A40] bg-neutral-50"
+                  }`}
+                  onClick={() => document.getElementById("local-pdf-input")?.click()}
+                >
+                  <input 
+                    type="file" 
+                    id="local-pdf-input"
+                    accept=".pdf,application/pdf"
+                    className="hidden"
+                    onChange={(e) => {
+                      if (e.target.files && e.target.files[0]) {
+                        const file = e.target.files[0];
+                        setUploadFile(file);
+                        if (!uploadTitle) {
+                          // Auto-fill title from filename
+                          const cleanName = file.name.replace(/\.[^/.]+$/, "");
+                          setUploadTitle(cleanName);
+                        }
+                      }
+                    }}
+                  />
+                  {uploadFile ? (
+                    <div className="flex flex-col items-center gap-1.5">
+                      <FileCheck className="w-8 h-8 text-emerald-600" />
+                      <p className="text-xs font-bold text-emerald-700 truncate max-w-xs">{uploadFile.name}</p>
+                      <p className="text-[10px] text-neutral-500">{(uploadFile.size / (1024 * 1024)).toFixed(2)} MB</p>
+                    </div>
+                  ) : (
+                    <div className="flex flex-col items-center gap-1.5">
+                      <Upload className="w-8 h-8 text-neutral-400" />
+                      <p className="text-xs text-neutral-600 font-medium">اسحب وأفلت الملف هنا أو انقر للتصفح</p>
+                      <p className="text-[10px] text-neutral-400">يدعم ملفات PDF فقط حتى 150 ميجابايت</p>
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#4A3B32] mb-1.5">عنوان المجلد الإلكتروني</label>
+                <input 
+                  type="text" 
+                  required
+                  value={uploadTitle}
+                  onChange={(e) => setUploadTitle(e.target.value)}
+                  placeholder="مثال: ديوان الهبّاب"
+                  className="w-full p-2.5 text-xs rounded-xl border border-neutral-300 focus:ring-1 focus:ring-[#5A5A40] outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#4A3B32] mb-1.5">اسم الكاتب أو المؤلف</label>
+                <input 
+                  type="text" 
+                  required
+                  value={uploadAuthor}
+                  onChange={(e) => setUploadAuthor(e.target.value)}
+                  placeholder="مثال: حمزة الملك طمبل"
+                  className="w-full p-2.5 text-xs rounded-xl border border-neutral-300 focus:ring-1 focus:ring-[#5A5A40] outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#4A3B32] mb-1.5">تصنيف الكتاب</label>
+                <select 
+                  value={uploadCategory}
+                  onChange={(e) => setUploadCategory(e.target.value)}
+                  className="w-full p-2.5 text-xs rounded-xl border border-neutral-300 focus:ring-1 focus:ring-[#5A5A40] outline-none bg-white text-[#4A3B32]"
+                >
+                  <option value="general">كتب عامة وروايات</option>
+                  <option value="curriculum">مناهج وزارة التربية والتعليم</option>
+                  <option value="children">كتب للأطفال</option>
+                  <option value="religious">المكتبة الدينية</option>
+                </select>
+              </div>
+
+              <div>
+                <label className="block text-xs font-bold text-[#4A3B32] mb-1.5">نبذة مختصرة عن الكتاب (اختياري)</label>
+                <textarea 
+                  value={uploadDesc}
+                  onChange={(e) => setUploadDesc(e.target.value)}
+                  placeholder="اكتب خلاصة أو فكرة عامة عن هذا الكتاب ليرى القراء ملخصاً عنه..."
+                  rows={2}
+                  className="w-full p-2.5 text-xs rounded-xl border border-neutral-300 focus:ring-1 focus:ring-[#5A5A40] outline-none"
+                />
+              </div>
+
+              <div className="flex gap-3 pt-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowUploadModal(false);
+                    setUploadFile(null);
+                    setErrorMsg(null);
+                  }}
+                  disabled={isUploading}
+                  className="flex-1 py-2.5 rounded-xl border border-neutral-300 hover:bg-neutral-50 text-xs font-bold text-neutral-600 transition-colors disabled:opacity-50"
+                >
+                  إلغاء الأمر
+                </button>
+                <button
+                  type="submit"
+                  disabled={isUploading}
+                  className="flex-1 py-2.5 rounded-xl bg-[#5A5A40] hover:bg-[#4A4A32] text-xs font-bold text-white transition-colors disabled:opacity-50 flex items-center justify-center gap-1.5"
+                >
+                  {isUploading ? (
+                    <>
+                      <span className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></span>
+                      <span>جاري الحفظ محلياً...</span>
+                    </>
+                  ) : (
+                    <span>حفظ وتخزين الكتاب</span>
+                  )}
                 </button>
               </div>
             </form>
