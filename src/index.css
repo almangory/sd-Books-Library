@@ -1,0 +1,30 @@
+@import url('https://fonts.googleapis.com/css2?family=Amiri:ital,wght@0,400;0,700;1,400;1,700&family=JetBrains+Mono:ital,wght@0,100..800;1,100..800&family=Tajawal:wght@200;300;400;500;700;800;900&display=swap');
+@import "tailwindcss";
+
+@theme {
+  --font-serif: "Amiri", Georgia, serif;
+  --font-sans: "Tajawal", "Inter", system-ui, sans-serif;
+  --font-mono: "JetBrains Mono", monospace;
+}
+
+body {
+  font-family: var(--font-sans);
+  direction: rtl; /* Set default Arabic RTL layout globally */
+}
+
+/* Custom horizontal slider scroll styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: #E6E0D4;
+  border-radius: 999px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: #5A5A40;
+}
+
