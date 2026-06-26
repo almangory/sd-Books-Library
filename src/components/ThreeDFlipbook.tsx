@@ -23,6 +23,7 @@ import {
 import { motion, AnimatePresence } from "motion/react";
 import * as pdfjsLib from "pdfjs-dist";
 // @ts-ignore
+import { getGoogleDriveDirectLink } from "../utils/driveParser";
 import pdfjsWorkerCode from "pdfjs-dist/build/pdf.worker.min.mjs?raw";
 
 // Create a safe, offline-capable, same-origin Blob URL from the raw worker code.
@@ -416,16 +417,9 @@ export default function ThreeDFlipbook({
         }
 
         if (typeof pdfSource === "string" && !pdfSource.startsWith("blob:")) {
-          // Check if it's a Google Drive URL
-          const driveMatch = pdfSource.match(/\/file\/d\/([a-zA-Z0-9_-]+)/) ||
-                             pdfSource.match(/id=([a-zA-Z0-9_-]+)/) ||
-                             pdfSource.match(/\/d\/([a-zA-Z0-9_-]+)/);
-          
-          if (driveMatch && driveMatch[1]) {
-            const fileId = driveMatch[1];
-            pdfSource = `/api/proxy-pdf?id=${fileId}`;
-          }
-        }
+  // تمرير الرابط عبر الدالة الذكية المربوطة بدومين المشروع الحالي لمنع الـ 404 والـ CORS
+  pdfSource = getGoogleDriveDirectLink(pdfSource);
+}
 
         if (!pdfSource) {
           throw new Error("رابط ملف الكتاب غير متوفر أو غير صالح.");
