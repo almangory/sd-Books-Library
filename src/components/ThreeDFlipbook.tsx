@@ -1797,7 +1797,7 @@ export default function ThreeDFlipbook({
                         <BookOpen className="w-7 h-7 text-[#5A5A40]" />
                       </div>
                     </div>
-                    <h3 className="font-bold text-[#5A5A40] text-md">جاري فتح المخطوطة الأثرية...</h3>
+                    <h3 className="font-bold text-[#5A5A40] text-md">جاري فتح الكتاب...</h3>
                     <p className={`text-xs mt-2 font-mono ${settings.darkMode ? "text-[#CBB59C]" : "text-[#8D7B68]"}`}>
                       جاري فك تشفير وتظليل الصفحات: {loadingProgress}%
                     </p>
