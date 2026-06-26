@@ -1,8 +1,9 @@
 import { createClient } from "@supabase/supabase-js";
 import { Book } from "../types";
 
-const supabaseUrl = (((import.meta as any).env?.VITE_SUPABASE_URL || "") as string).trim();
-const supabaseAnonKey = (((import.meta as any).env?.VITE_SUPABASE_ANON_KEY || "") as string).trim();
+// ⚠️ حط روابط مشروعك (sd-Books-Library) المباشرة هنا عشان تشتغل جوة الـ AI Studio طوالي:
+const supabaseUrl = "https://your-project-id.supabase.co".trim();
+const supabaseAnonKey = "your-actual-anon-key-here".trim();
 
 export const isSupabaseConfigured = !!(supabaseUrl && supabaseAnonKey);
 
