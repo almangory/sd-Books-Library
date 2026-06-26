@@ -1,6 +1,6 @@
 /**
- * Helper to parse Google Drive URLs and convert them into direct download/stream URLs.
- * تم تعديل الترتيب البرمجي للمعلمات لإجبار قوقل على تمرير الملف الصافي وتفادي صفحة الحظر
+ * Helper to parse Google Drive URLs and convert them into direct preview/stream URLs.
+ * تم التعديل النهائي لصيغة المعاينة لتفادي حظر سيرفرات قوقل وصفحات الفحص نهائياً
  */
 export function getGoogleDriveDirectLink(url: string): string {
   if (!url) return "";
@@ -25,11 +25,8 @@ export function getGoogleDriveDirectLink(url: string): string {
   }
   
   if (fileId) {
-    // التقاط رابط الدومين الحالي
-    const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
-    
-    // الحسم هنا: ترتيب الـ id أولاً ثم الـ export مجرب ومضمون لتخطي جدار الفحص حق قوقل
-    return `${currentOrigin}/api/drive-proxy?id=${fileId}&export=download`;
+    // الحسم هنا: إرجاع رابط المعاينة المباشر، وهو الرابط الأضمن لتخطي جدار الـ CORS وحظر التحميل
+    return `https://drive.google.com/file/d/${fileId}/preview`;
   }
   
   return trimmed;
