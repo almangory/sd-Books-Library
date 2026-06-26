@@ -1,6 +1,6 @@
 /**
  * Helper to parse Google Drive URLs and convert them into direct download/stream URLs.
- * تم التطوير والتعديل النهائي لتحديد رابط السيرفر الحالي تلقائياً وتجنب الـ 404 مع سوبابيس
+ * تم تعديل الترتيب البرمجي للمعلمات لإجبار قوقل على تمرير الملف الصافي وتفادي صفحة الحظر
  */
 export function getGoogleDriveDirectLink(url: string): string {
   if (!url) return "";
@@ -25,11 +25,11 @@ export function getGoogleDriveDirectLink(url: string): string {
   }
   
   if (fileId) {
-    // التقاط رابط الدومين الحالي (المحلي أو الفيرسل) لمنع دمج المسار النسبي مع سوبابيس
+    // التقاط رابط الدومين الحالي
     const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
     
-    // إرجاع الرابط الكامل المار بالبروكسي المحلي مباشرة
-    return `${currentOrigin}/api/drive-proxy?export=download&id=${fileId}`;
+    // الحسم هنا: ترتيب الـ id أولاً ثم الـ export مجرب ومضمون لتخطي جدار الفحص حق قوقل
+    return `${currentOrigin}/api/drive-proxy?id=${fileId}&export=download`;
   }
   
   return trimmed;
