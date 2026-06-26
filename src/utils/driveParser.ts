@@ -1,6 +1,6 @@
 /**
  * Helper to parse Google Drive URLs and convert them into direct download/stream URLs.
- * تم تحويل المسار ليمر عبر البروكسي المحلي لتخطي حماية CORS نهائياً داخل AI Studio و Vercel
+ * تم التطوير والتعديل النهائي لتحديد رابط السيرفر الحالي تلقائياً وتجنب الـ 404 مع سوبابيس
  */
 export function getGoogleDriveDirectLink(url: string): string {
   if (!url) return "";
@@ -25,8 +25,11 @@ export function getGoogleDriveDirectLink(url: string): string {
   }
   
   if (fileId) {
-    // التعديل الحاسم: توجيه الطلب إلى البروكسي الداخلي المفرمل في vite.config.ts
-    return `/api/drive-proxy?export=download&id=${fileId}`;
+    // التقاط رابط الدومين الحالي (المحلي أو الفيرسل) لمنع دمج المسار النسبي مع سوبابيس
+    const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+    
+    // إرجاع الرابط الكامل المار بالبروكسي المحلي مباشرة
+    return `${currentOrigin}/api/drive-proxy?export=download&id=${fileId}`;
   }
   
   return trimmed;
