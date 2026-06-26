@@ -28,11 +28,11 @@ export async function getSupabaseBooks(): Promise<Book[] | null> {
 
     if (data) {
       return data.map((item: any) => ({
-        id: item.id,
+        id: String(item.id), // تحويل دائم لنص عشان يطابق الـ Frontend
         title: item.title,
         author: item.author,
         description: item.description || "",
-        pdfUrl: item.google_drive_url || item.pdfUrl,
+        pdfUrl: item.google_drive_url || item.pdfUrl || "",
         coverUrl: item.cover_url || "",
         isCustom: item.is_custom !== undefined ? item.is_custom : true,
         addedAt: item.added_at ? new Date(item.added_at).getTime() : Date.now(),
@@ -52,17 +52,24 @@ export async function getSupabaseBooks(): Promise<Book[] | null> {
 export async function insertSupabaseBook(book: Book): Promise<Book | null> {
   if (!supabase) return null;
   try {
+    // تجهيز البيانات
+    const insertData: any = {
+      title: book.title,
+      author: book.author,
+      description: book.description,
+      google_drive_url: book.pdfUrl,
+      category: book.category || "general",
+    };
+
+    // لو الـ ID المرسل عبارة عن UUID صحيح نرسله، لو نص عادي (زي def_1) نخلي سوبابيس تولد واحد تلقائي
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(book.id);
+    if (isUuid) {
+      insertData.id = book.id;
+    }
+
     const { data, error } = await supabase
       .from("books")
-      .insert([
-        {
-          title: book.title,
-          author: book.author,
-          description: book.description,
-          google_drive_url: book.pdfUrl,
-          category: book.category || "general",
-        },
-      ])
+      .insert([insertData])
       .select()
       .single();
 
@@ -73,7 +80,7 @@ export async function insertSupabaseBook(book: Book): Promise<Book | null> {
 
     if (data) {
       return {
-        id: data.id,
+        id: String(data.id),
         title: data.title,
         author: data.author,
         description: data.description || "",
@@ -97,6 +104,13 @@ export async function insertSupabaseBook(book: Book): Promise<Book | null> {
 export async function updateSupabaseBook(book: Book): Promise<boolean> {
   if (!supabase) return false;
   try {
+    // التأكد من أن الـ ID المطابق هو UUID، لو ما UUID ما حيتعدل في قاعدة البيانات الحالية
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(book.id);
+    if (!isUuid) {
+      console.warn("تنبيه: لا يمكن تعديل الكتب الافتراضية داخل سوبابيس لأن معرّفها ليس UUID");
+      return false; 
+    }
+
     const { error } = await supabase
       .from("books")
       .update({
@@ -125,6 +139,9 @@ export async function updateSupabaseBook(book: Book): Promise<boolean> {
 export async function deleteSupabaseBook(id: string): Promise<boolean> {
   if (!supabase) return false;
   try {
+    const isUuid = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(id);
+    if (!isUuid) return false; // الكتب المحلية الافتراضية تحذف من الستيت فقط
+
     const { error } = await supabase.from("books").delete().eq("id", id);
     if (error) {
       console.error("Error deleting book from Supabase:", error);
@@ -138,8 +155,7 @@ export async function deleteSupabaseBook(id: string): Promise<boolean> {
 }
 
 /**
- * Fetch Admin password from Supabase. 
- * Falls back to default password '20302060' if not set or if there is an error.
+ * Fetch Admin password from Supabase.
  */
 export async function getAdminPassword(): Promise<string> {
   const DEFAULT_PASS = "20302060";
@@ -152,7 +168,6 @@ export async function getAdminPassword(): Promise<string> {
       .single();
 
     if (error) {
-      // If table doesn't exist yet or is empty, fallback gracefully to default password
       return DEFAULT_PASS;
     }
 
