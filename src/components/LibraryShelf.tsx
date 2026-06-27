@@ -25,7 +25,9 @@ import {
   Maximize,
   Minimize,
   Search,
-  X
+  X,
+  Heart,
+  ListPlus
 } from "lucide-react";
 
 interface LibraryShelfProps {
@@ -121,6 +123,99 @@ export default function LibraryShelf({
   // Filter tab state
   const [activeTab, setActiveTab] = useState<string>("all");
 
+  // Favorites State
+  const [favorites, setFavorites] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("library_favorites");
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  useEffect(() => {
+    localStorage.setItem("library_favorites", JSON.stringify(favorites));
+  }, [favorites]);
+
+  const toggleFavorite = (bookId: string, e?: React.MouseEvent) => {
+    if (e) {
+      e.stopPropagation();
+      e.preventDefault();
+    }
+    setFavorites(prev => 
+      prev.includes(bookId) ? prev.filter(id => id !== bookId) : [...prev, bookId]
+    );
+  };
+
+  // Reading Lists State
+  interface ReadingList {
+    id: string;
+    name: string;
+    bookIds: string[];
+  }
+
+  const [readingLists, setReadingLists] = useState<ReadingList[]>(() => {
+    try {
+      const saved = localStorage.getItem("library_reading_lists");
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [activeReadingListId, setActiveReadingListId] = useState<string | null>(null);
+  const [newReadingListName, setNewReadingListName] = useState<string>("");
+  const [showCreateListInput, setShowCreateListInput] = useState<boolean>(false);
+
+  useEffect(() => {
+    localStorage.setItem("library_reading_lists", JSON.stringify(readingLists));
+  }, [readingLists]);
+
+  const handleCreateReadingList = (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = newReadingListName.trim();
+    if (!name) return;
+    
+    // Check duplicate
+    if (readingLists.some(l => l.name.toLowerCase() === name.toLowerCase())) {
+      alert("توجد قائمة قراءة بهذا الاسم بالفعل!");
+      return;
+    }
+
+    const newList: ReadingList = {
+      id: "list_" + Math.random().toString(36).substr(2, 9),
+      name,
+      bookIds: []
+    };
+
+    setReadingLists(prev => [...prev, newList]);
+    setNewReadingListName("");
+    setShowCreateListInput(false);
+  };
+
+  const handleDeleteReadingList = (listId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    if (confirm("هل أنت متأكد من حذف قائمة القراءة هذه؟ (لن يتم حذف الكتب من المكتبة)")) {
+      setReadingLists(prev => prev.filter(l => l.id !== listId));
+      if (activeReadingListId === listId) {
+        setActiveReadingListId(null);
+      }
+    }
+  };
+
+  const toggleBookInReadingList = (listId: string, bookId: string) => {
+    setReadingLists(prev => prev.map(list => {
+      if (list.id === listId) {
+        const alreadyIn = list.bookIds.includes(bookId);
+        return {
+          ...list,
+          bookIds: alreadyIn ? list.bookIds.filter(id => id !== bookId) : [...list.bookIds, bookId]
+        };
+      }
+      return list;
+    }));
+  };
+
   // Sorting & Tagging States
   const [sortBy, setSortBy] = useState<"date" | "alphabet">("date");
   const [selectedTag, setSelectedTag] = useState<string>("all");
@@ -134,6 +229,11 @@ export default function LibraryShelf({
   // Last opened book for 'Continue Reading' feature
   const [lastOpenedBook, setLastOpenedBook] = useState<Book | null>(null);
   const [lastOpenedPage, setLastOpenedPage] = useState<number | null>(null);
+
+  // Long-press detailed preview modal states
+  const [previewBook, setPreviewBook] = useState<Book | null>(null);
+  const [longPressTimer, setLongPressTimer] = useState<any>(null);
+  const [isLongPressTriggered, setIsLongPressTriggered] = useState<boolean>(false);
 
   useEffect(() => {
     if (typeof window === "undefined") return;
@@ -171,9 +271,18 @@ export default function LibraryShelf({
     // 1. Filter by category tab
     let list = books.filter(book => {
       if (activeTab === "all") return true;
+      if (activeTab === "favorites") return favorites.includes(book.id);
       if (activeTab === "general") return book.category === "general" || !book.category;
       return book.category === activeTab;
     });
+
+    // 1.5. Filter by active reading list
+    if (activeReadingListId) {
+      const activeList = readingLists.find(l => l.id === activeReadingListId);
+      if (activeList) {
+        list = list.filter(book => activeList.bookIds.includes(book.id));
+      }
+    }
 
     // 2. Filter by selected tag/group
     if (selectedTag !== "all") {
@@ -204,7 +313,7 @@ export default function LibraryShelf({
         return (b.addedAt || 0) - (a.addedAt || 0);
       }
     });
-  }, [books, activeTab, selectedTag, sortBy, searchQuery]);
+  }, [books, activeTab, selectedTag, sortBy, searchQuery, favorites, activeReadingListId, readingLists]);
 
   // Help tips toggler
   const [showHelp, setShowHelp] = useState<boolean>(false);
@@ -423,6 +532,60 @@ export default function LibraryShelf({
     setEditCategory("general");
     setEditTagsStr("");
     setErrorMsg(null);
+  };
+
+  // Long-press detection helpers for touch and mouse
+  const handleBookTouchStart = (book: Book) => {
+    setIsLongPressTriggered(false);
+    const timer = setTimeout(() => {
+      setPreviewBook(book);
+      setIsLongPressTriggered(true);
+      if (typeof navigator !== "undefined" && navigator.vibrate) {
+        try {
+          navigator.vibrate(50);
+        } catch (e) {
+          // ignore potential iframe security restriction
+        }
+      }
+    }, 550); // 550ms hold
+    setLongPressTimer(timer);
+  };
+
+  const handleBookTouchEnd = (e: React.TouchEvent) => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+    }
+    if (isLongPressTriggered) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
+  };
+
+  const handleBookMouseDown = (book: Book) => {
+    setIsLongPressTriggered(false);
+    const timer = setTimeout(() => {
+      setPreviewBook(book);
+      setIsLongPressTriggered(true);
+    }, 550);
+    setLongPressTimer(timer);
+  };
+
+  const handleBookMouseUp = (e: React.MouseEvent, book: Book) => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+    }
+    if (isLongPressTriggered) {
+      e.preventDefault();
+      e.stopPropagation();
+    } else {
+      onSelectBook(book);
+    }
+  };
+
+  const handleBookMouseLeave = () => {
+    if (longPressTimer) {
+      clearTimeout(longPressTimer);
+    }
   };
 
   // Dynamic aesthetic generator for abstract book cover colors representing Sudanese Earth tones or colorful kids stories
@@ -678,6 +841,7 @@ export default function LibraryShelf({
             <div className="flex items-center gap-2 justify-start overflow-x-auto py-1.5 scrollbar-none flex-row-reverse">
               {[
                 { id: "all", label: "الكل", icon: "📚", count: books.length },
+                { id: "favorites", label: "المفضلة 💖", icon: "❤️", count: books.filter(b => favorites.includes(b.id)).length },
                 { id: "curriculum", label: "مناهج وزارة التربية والتعليم", icon: "🏫", count: books.filter(b => b.category === "curriculum").length },
                 { id: "children", label: "كتب للأطفال", icon: "👶", count: books.filter(b => b.category === "children").length },
                 { id: "religious", label: "المكتبة الدينية", icon: "🕌", count: books.filter(b => b.category === "religious").length },
@@ -708,6 +872,119 @@ export default function LibraryShelf({
                 );
               })}
             </div>
+          </div>
+
+          {/* My Reading Lists Dashboard (قوائم القراءة المخصصة) */}
+          <div className="mb-6 p-4 bg-[#FAF5EC]/90 rounded-2xl border border-[#E6E0D4] text-right" dir="rtl">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-3 border-b border-[#E6E0D4]/60 pb-3">
+              <div className="flex items-center gap-2 flex-row-reverse">
+                <span className="text-xl">📋</span>
+                <div>
+                  <h4 className="text-xs font-bold text-[#6D4C41]">قوائم القراءة الخاصة بك</h4>
+                  <p className="text-[10px] text-[#8D7B68]/80 mt-0.5">أنشئ قوائم مخصصة لتجميع كتبك وتنسيق مكتبتك الخاصة</p>
+                </div>
+              </div>
+
+              {/* Toggle new list form button */}
+              <button
+                type="button"
+                onClick={() => setShowCreateListInput(!showCreateListInput)}
+                className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-[#5A5A40] hover:bg-[#4A4A32] text-white text-[11px] font-bold transition-all shadow-sm self-start sm:self-auto"
+              >
+                <Plus size={13} />
+                <span>إنشاء قائمة جديدة</span>
+              </button>
+            </div>
+
+            {/* Create reading list inline form */}
+            {showCreateListInput && (
+              <form onSubmit={handleCreateReadingList} className="flex gap-2 items-center mb-4 max-w-md ml-auto flex-row-reverse">
+                <input
+                  type="text"
+                  placeholder="اكتب اسم القائمة الجديدة (مثال: قراءات الصيف)..."
+                  value={newReadingListName}
+                  onChange={(e) => setNewReadingListName(e.target.value)}
+                  className="flex-1 bg-white border border-[#E6E0D4] rounded-lg px-3 py-1.5 text-xs text-[#4A3B32] font-semibold placeholder-[#8D7B68]/50 focus:outline-none focus:ring-1 focus:ring-[#5A5A40] text-right"
+                  required
+                />
+                <button
+                  type="submit"
+                  className="px-3 py-1.5 bg-[#5A5A40] text-white rounded-lg text-xs font-bold hover:bg-[#4A4A32] transition-colors"
+                >
+                  حفظ
+                </button>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setShowCreateListInput(false);
+                    setNewReadingListName("");
+                  }}
+                  className="px-3 py-1.5 bg-neutral-200 text-neutral-600 rounded-lg text-xs font-bold hover:bg-neutral-300 transition-colors"
+                >
+                  إلغاء
+                </button>
+              </form>
+            )}
+
+            {/* List of custom reading lists */}
+            {readingLists.length === 0 ? (
+              <p className="text-[11px] text-[#8D7B68]/80 italic py-1">
+                ليس لديك أي قوائم مخصصة بعد. انقر على "إنشاء قائمة جديدة" للبدء في تنظيم كتبك المفضلة!
+              </p>
+            ) : (
+              <div className="flex flex-wrap gap-2 justify-start flex-row-reverse">
+                {/* Clear reading list filter button (All Books) */}
+                <button
+                  type="button"
+                  onClick={() => setActiveReadingListId(null)}
+                  className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-200 select-none ${
+                    activeReadingListId === null
+                      ? "bg-[#6D4C41] text-white shadow-sm border border-[#6D4C41]"
+                      : "bg-white text-[#6D4C41] border border-[#E6E0D4] hover:bg-amber-50/50"
+                  }`}
+                >
+                  <span>كل كتب القسم</span>
+                </button>
+
+                {readingLists.map((list) => {
+                  const isActive = activeReadingListId === list.id;
+                  return (
+                    <div
+                      key={list.id}
+                      className="inline-flex items-center gap-1"
+                    >
+                      <button
+                        type="button"
+                        onClick={() => setActiveReadingListId(isActive ? null : list.id)}
+                        className={`flex items-center gap-1.5 px-3.5 py-1.5 rounded-full text-xs font-bold transition-all duration-200 select-none ${
+                          isActive
+                            ? "bg-[#5A5A40] text-[#FAF6EE] shadow-sm border border-[#5A5A40]"
+                            : "bg-white text-[#6D4C41] border border-[#E6E0D4] hover:bg-[#FAF5EC]"
+                        }`}
+                      >
+                        <span>📂</span>
+                        <span>{list.name}</span>
+                        <span className={`text-[9px] px-1.5 py-0.5 rounded-full font-mono ${
+                          isActive ? "bg-white/20 text-white" : "bg-[#5A5A40]/10 text-[#5A5A40]"
+                        }`}>
+                          {list.bookIds.length}
+                        </span>
+                      </button>
+
+                      {/* Delete Reading List Button */}
+                      <button
+                        type="button"
+                        onClick={(e) => handleDeleteReadingList(list.id, e)}
+                        className="p-1 rounded-full text-stone-400 hover:text-rose-600 hover:bg-rose-50 transition-all"
+                        title="حذف القائمة"
+                      >
+                        <Trash2 size={12} />
+                      </button>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
           </div>
 
           {/* Sorting and Tagging Controls Row */}
@@ -997,13 +1274,33 @@ export default function LibraryShelf({
                   <div className="relative aspect-[3/4] w-full z-10">
                     {/* The stylized 3D realistic book spine & cover cover */}
                     <div 
-                      onClick={() => onSelectBook(book)}
+                      onMouseDown={() => handleBookMouseDown(book)}
+                      onMouseUp={(e) => handleBookMouseUp(e, book)}
+                      onMouseLeave={handleBookMouseLeave}
+                      onTouchStart={() => handleBookTouchStart(book)}
+                      onTouchEnd={(e) => handleBookTouchEnd(e)}
+                      onTouchMove={handleBookMouseLeave}
                       className={`cursor-pointer absolute inset-0 rounded-r-lg rounded-l-md shadow-lg hover:shadow-2xl transition-all duration-300 transform preserve-3d overflow-hidden flex flex-col justify-between p-3.5 border-r border-[#ffffff30] z-10 ${leaningClass} ${
                         isKidsBook ? "ring-2 ring-yellow-300/40 hover:ring-yellow-300/80 shadow-rose-300/25" : ""
                       }`}
                     >
                       {/* The Cover gradient and background pattern */}
                       <div className={`absolute inset-0 ${colors.bg} z-0`}></div>
+                      
+                      {/* Favorite Heart Button on the top left of the card */}
+                      <button
+                        type="button"
+                        onClick={(e) => toggleFavorite(book.id, e)}
+                        className="absolute top-2.5 left-2.5 z-30 p-1.5 rounded-full bg-black/40 hover:bg-black/60 backdrop-blur-xs border border-white/10 transition-all duration-200"
+                        title={favorites.includes(book.id) ? "إزالة من المفضلة" : "إضافة للمفضلة"}
+                      >
+                        <Heart 
+                          size={11} 
+                          className={`transition-all duration-300 ${
+                            favorites.includes(book.id) ? "fill-rose-500 text-rose-500 scale-110" : "text-white/80 hover:text-white"
+                          }`} 
+                        />
+                      </button>
                       
                       {/* Playful Stickers on kids book cover */}
                       {isKidsBook && (
@@ -1046,18 +1343,42 @@ export default function LibraryShelf({
                           </p>
                         </div>
  
-                        {/* Decorative medallion badge at the bottom */}
+                        {/* Decorative medallion badge at the bottom with quick-preview info button */}
                         {isKidsBook ? (
-                          <div className="mx-auto mt-2 text-center">
+                          <div className="mx-auto mt-2 text-center relative flex items-center justify-center w-full">
                             <div className="w-7 h-7 rounded-full border border-yellow-300 flex items-center justify-center bg-yellow-400/20 text-yellow-300 animate-pulse">
                               <span className="text-xs">⭐</span>
                             </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                setPreviewBook(book);
+                              }}
+                              className="absolute left-1/2 translate-x-4 w-6 h-6 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center border border-white/20 text-[10px] transition-all"
+                              title="تفاصيل الكتاب"
+                            >
+                              ℹ️
+                            </button>
                           </div>
                         ) : (
-                          <div className="mx-auto mt-2 text-center">
+                          <div className="mx-auto mt-2 text-center relative flex items-center justify-center w-full">
                             <div className={`w-7 h-7 rounded-full border ${colors.accent} flex items-center justify-center bg-black/10 text-amber-300/60`}>
                               <span className="text-[9px] font-mono">۞</span>
                             </div>
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                e.preventDefault();
+                                setPreviewBook(book);
+                              }}
+                              className="absolute left-1/2 translate-x-4.5 w-6 h-6 rounded-full bg-black/40 hover:bg-black/60 text-white flex items-center justify-center border border-white/20 text-[10px] transition-all"
+                              title="تفاصيل الكتاب"
+                            >
+                              ℹ️
+                            </button>
                           </div>
                         )}
  
@@ -1611,6 +1932,166 @@ export default function LibraryShelf({
           </div>
         </div>
       )}
+
+      {/* 8. DETAIL PREVIEW MODAL (ON LONG PRESS OR INFO CLICK) */}
+      {previewBook && (() => {
+        const colors = getTraditionalCoverColors(previewBook.title, previewBook.id, previewBook.category);
+        const isKidsBook = previewBook.category === "children";
+        
+        // Translate department names
+        const categoryNames: Record<string, string> = {
+          curriculum: "مناهج وزارة التربية والتعليم",
+          children: "كتب للأطفال والبراعم",
+          religious: "المكتبة الإسلامية والدينية",
+          general: "الكتب العامة والروايات الأدبية"
+        };
+        const categoryName = categoryNames[previewBook.category || "general"] || "الكتب العامة";
+
+        return (
+          <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/70 backdrop-blur-md animate-fade-in text-right">
+            <div className="w-full max-w-2xl bg-[#FAF6F0] rounded-3xl border-2 border-[#E6DCC8] shadow-2xl overflow-hidden flex flex-col md:flex-row-reverse">
+              
+              {/* Cover Preview Section */}
+              <div className="md:w-2/5 p-6 bg-gradient-to-br from-[#F5EFE4] to-[#E9DFCE] border-b md:border-b-0 md:border-l border-[#E6DCC8] flex flex-col items-center justify-center">
+                <div className="relative w-32 aspect-[3/4] shadow-2xl rounded-r-lg rounded-l-md overflow-hidden transform hover:scale-105 transition-all duration-300 preserve-3d flex flex-col justify-between p-4 border border-[#ffffff30] select-none">
+                  <div className={`absolute inset-0 ${colors.bg} z-0`}></div>
+                  {/* Decorative motif */}
+                  <div className={`absolute inset-2 border border-dashed rounded-md z-0 pointer-events-none ${
+                    isKidsBook ? "border-white/50" : "border-white/20"
+                  }`}></div>
+                  <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-r from-black/50 to-transparent z-10"></div>
+                  
+                  {/* Banner */}
+                  <div className="relative z-10 py-1 px-1.5 rounded bg-white/25 text-[8px] font-extrabold text-white text-center truncate">
+                    {categoryName}
+                  </div>
+                  
+                  {/* Title */}
+                  <div className="relative z-10 my-auto text-center py-2">
+                    <p className={`font-serif font-extrabold text-[10px] leading-snug text-yellow-50 line-clamp-3`}>
+                      {previewBook.title}
+                    </p>
+                    <p className="text-[8px] mt-1 text-yellow-100 opacity-90 truncate italic">
+                      {previewBook.author}
+                    </p>
+                  </div>
+
+                  {/* Icon medallion */}
+                  <div className="relative z-10 mx-auto w-6 h-6 rounded-full border border-white/20 flex items-center justify-center bg-black/10 text-amber-200 text-[9px]">
+                    {isKidsBook ? "⭐" : "۞"}
+                  </div>
+                </div>
+                
+                {/* Book size / format */}
+                <div className="mt-4 px-3 py-1 bg-white/50 rounded-full border border-neutral-200 text-[10px] font-bold text-neutral-600">
+                  {previewBook.isCustom 
+                    ? (previewBook.fileSize ? `ملف محلي • ${previewBook.fileSize}` : "رابط سحابي مباشر") 
+                    : "مخطوطة مدمجة بالنظام"
+                  }
+                </div>
+              </div>
+
+              {/* Book Metadata & Actions Section */}
+              <div className="md:w-3/5 p-6 flex flex-col justify-between text-right">
+                <div>
+                  <div className="flex items-center gap-1.5 justify-end text-[#5A5A40] mb-1">
+                    <span className="text-[10px] font-extrabold bg-[#5A5A40]/10 px-2.5 py-1 rounded-full">{categoryName}</span>
+                    <span className="text-xs text-neutral-400">•</span>
+                    <span className="text-xs text-neutral-500 font-bold">تفاصيل الكتاب</span>
+                  </div>
+
+                  <h3 className="text-lg font-extrabold text-[#4A3B32] font-serif leading-snug mt-2">
+                    {previewBook.title}
+                  </h3>
+
+                  <p className="text-xs text-neutral-500 mt-1 font-medium">
+                    المؤلف: <span className="text-[#8D7B68] font-bold">{previewBook.author}</span>
+                  </p>
+
+                  <div className="my-4 border-t border-dashed border-[#E6DCC8]" />
+
+                  <h4 className="text-xs font-extrabold text-[#4A3B32] mb-1.5">نبذة عن الكتاب:</h4>
+                  <p className="text-xs text-[#6D4C41] leading-relaxed max-h-36 overflow-y-auto pl-2 scrollbar-thin scrollbar-thumb-amber-200 text-right">
+                    {previewBook.description || "لا يوجد وصف مفصل متاح لهذا الكتاب حالياً في خزانة الكتب. يمكنك فتح الكتاب لاستكشاف كامل محتوياته القيمة وقراءة فصوله الأثرية."}
+                  </p>
+
+                  {/* Tags */}
+                  {previewBook.tags && previewBook.tags.length > 0 && (
+                    <div className="mt-4">
+                      <h4 className="text-xs font-extrabold text-[#4A3B32] mb-1.5">المجموعات والوسوم:</h4>
+                      <div className="flex flex-wrap gap-1.5 justify-end">
+                        {previewBook.tags.map((tag) => (
+                          <span 
+                            key={tag} 
+                            className="text-[10px] font-bold px-2.5 py-0.5 rounded-md bg-amber-50 text-amber-800 border border-amber-200/40"
+                          >
+                            #{tag}
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Reading Lists Selection */}
+                  <div className="mt-4 pt-3 border-t border-dashed border-[#E6DCC8]">
+                    <h4 className="text-xs font-extrabold text-[#4A3B32] mb-1.5 flex items-center gap-1 flex-row-reverse">
+                      <span>إضافة إلى قائمة قراءة مخصصة:</span>
+                    </h4>
+                    {readingLists.length === 0 ? (
+                      <p className="text-[10px] text-[#8D7B68] italic leading-normal">
+                        لا توجد قوائم قراءة مخصصة حالياً. أنشئ قائمة جديدة من شريط القوائم في الأعلى لتنظيم كتبك المفضلة وتجميعها.
+                      </p>
+                    ) : (
+                      <div className="flex flex-wrap gap-1.5 justify-end">
+                        {readingLists.map((list) => {
+                          const isInList = list.bookIds.includes(previewBook.id);
+                          return (
+                            <button
+                              key={list.id}
+                              type="button"
+                              onClick={() => toggleBookInReadingList(list.id, previewBook.id)}
+                              className={`text-[9px] font-bold px-2 py-1 rounded-full border transition-all duration-200 flex items-center gap-1 ${
+                                isInList
+                                  ? "bg-[#5A5A40] text-white border-[#5A5A40] shadow-xs"
+                                  : "bg-white text-[#6D4C41] border-[#E6DCC8] hover:bg-[#FAF5EC]"
+                              }`}
+                            >
+                              <span>{isInList ? "✓" : "+"}</span>
+                              <span>{list.name}</span>
+                            </button>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="flex gap-3 mt-6 pt-4 border-t border-[#E6DCC8]">
+                  <button
+                    type="button"
+                    onClick={() => setPreviewBook(null)}
+                    className="flex-1 py-2.5 rounded-xl border border-neutral-300 hover:bg-neutral-50 text-xs font-bold text-neutral-600 transition-colors"
+                  >
+                    إغلاق النافذة
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const bookToOpen = previewBook;
+                      setPreviewBook(null);
+                      onSelectBook(bookToOpen);
+                    }}
+                    className="flex-1.5 py-2.5 rounded-xl bg-[#5A5A40] hover:bg-[#4A4A32] text-xs font-bold text-white transition-colors flex items-center justify-center gap-1.5 shadow-md shadow-[#5A5A40]/10"
+                  >
+                    <span>📖 فتح قراءة الكتاب</span>
+                  </button>
+                </div>
+              </div>
+
+            </div>
+          </div>
+        );
+      })()}
 
     </div>
   );

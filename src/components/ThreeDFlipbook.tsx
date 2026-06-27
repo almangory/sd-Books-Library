@@ -1900,159 +1900,212 @@ export default function ThreeDFlipbook({
                     </div>
                   ) : (
                     
-                    /* DOUBLE PAGE VIEW MODE (Desktop) */
-                    <div className="flex w-full h-full" style={{ transformStyle: "preserve-3d" }}>
-                      
-                      {/* LEFT PAGE CONTAINER */}
-                      <div 
-                        onClick={() => {
-                          if (isRTL) handleNextPage();
-                          else handlePrevPage();
-                        }}
-                        className={`w-1/2 h-full relative rounded-r-none rounded-l-2xl border-4 border-r-0 shadow-2xl flex flex-col justify-between overflow-hidden transition-all transform-gpu cursor-pointer active:brightness-95 ${
-                          settings.darkMode 
-                            ? "bg-[#261F1A] border-[#3D322A]" 
-                            : "bg-[#FAF7EE] border-[#EADDC9]"
-                        }`}
-                        style={{
-                          transformOrigin: "right center"
-                        }}
-                      >
-                        {/* Shadow on inner spine */}
-                        <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-black/25 to-transparent pointer-events-none z-10"></div>
-                        <div className="absolute inset-0 bg-[radial-gradient(#5A5A40_0.5px,transparent_0.5px)] [background-size:16px_16px] opacity-5 pointer-events-none"></div>
+                    /* DOUBLE PAGE VIEW MODE (Desktop) WITH REALISTIC SHADOWS & LIGHT BURSTS */
+                    (() => {
+                      const isSheetActive = isFlipping || (isDragging && dragDirectionState !== null);
+                      const activeDirection = isDragging ? dragDirectionState : flipDirection;
 
-                        {/* Page Content */}
-                        {doubleLeftPage ? (
-                          renderedPages[doubleLeftPage] ? (
-                            <img 
-                              src={renderedPages[doubleLeftPage]} 
-                              alt={`الصفحة ${doubleLeftPage}`} 
-                              className="w-full h-full object-contain pointer-events-none"
-                              referrerPolicy="no-referrer"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex flex-col items-center justify-center">
-                              <span className="animate-pulse text-xs text-[#5A5A40]">جاري صقل الحروف... ({doubleLeftPage})</span>
-                            </div>
-                          )
-                        ) : (
-                          <div className="w-full h-full flex flex-col items-center justify-center opacity-30">
-                            <BookOpen className="w-12 h-12 text-[#5A5A40] mb-2" />
-                            <span className="text-xs">نهاية المجلد الأثرى</span>
-                          </div>
-                        )}
+                      // Calculate progress of dragging from 0 to 1 based on dragOffset (250px max width for swipe)
+                      const dragProgress = Math.min(Math.max(Math.abs(dragOffset) / 250, 0), 1);
 
-                        {/* Page Indicator */}
-                        {doubleLeftPage && (
-                          <div className="absolute bottom-2.5 left-6 right-3 flex justify-between text-[10px] font-mono opacity-65">
-                            <span>{doubleLeftPage}</span>
-                            <span>{book.author}</span>
-                          </div>
-                        )}
-                      </div>
+                      // Compute drag rotation, skew/curl, and z depth
+                      let dragRotateY = 0;
+                      let dragSkewY = 0;
+                      let dragZ = 0;
 
-                      {/* RIGHT PAGE CONTAINER */}
-                      <div 
-                        onClick={() => {
-                          if (isRTL) handlePrevPage();
-                          else handleNextPage();
-                        }}
-                        className={`w-1/2 h-full relative rounded-l-none rounded-r-2xl border-4 border-l-0 shadow-2xl flex flex-col justify-between overflow-hidden transition-all transform-gpu cursor-pointer active:brightness-95 ${
-                          settings.darkMode 
-                            ? "bg-[#261F1A] border-[#3D322A]" 
-                            : "bg-[#FAF7EE] border-[#EADDC9]"
-                        }`}
-                      >
-                        {/* Shadow on inner spine */}
-                        <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-black/25 to-transparent pointer-events-none z-10"></div>
-                        <div className="absolute inset-0 bg-[radial-gradient(#5A5A40_0.5px,transparent_0.5px)] [background-size:16px_16px] opacity-5 pointer-events-none"></div>
-
-                        {/* Page Content */}
-                        {doubleRightPage ? (
-                          renderedPages[doubleRightPage] ? (
-                            <img 
-                              src={renderedPages[doubleRightPage]} 
-                              alt={`الصفحة ${doubleRightPage}`} 
-                              className="w-full h-full object-contain pointer-events-none"
-                              referrerPolicy="no-referrer"
-                            />
-                          ) : (
-                            <div className="w-full h-full flex flex-col items-center justify-center">
-                              <span className="animate-pulse text-xs text-[#5A5A40]">جاري صقل الحروف... ({doubleRightPage})</span>
-                            </div>
-                          )
-                        ) : (
-                          <div className="w-full h-full flex flex-col items-center justify-center opacity-30">
-                            <span className="text-xs">بداية الغلاف</span>
-                          </div>
-                        )}
-
-                        {/* Page Indicator */}
-                        {doubleRightPage && (
-                          <div className="absolute bottom-2.5 left-3 right-6 flex justify-between text-[10px] font-mono opacity-65">
-                            <span>{book.title}</span>
-                            <span>{doubleRightPage}</span>
-                          </div>
-                        )}
-                      </div>
-
-                      {/* 3D FLIPPING PAGE SHEET (CSS preserve-3d animation layered absolutely on top) */}
-                      {(() => {
-                        const isSheetActive = isFlipping || (isDragging && dragDirectionState !== null);
-                        const activeDirection = isDragging ? dragDirectionState : flipDirection;
-
-                        // Calculate progress of dragging from 0 to 1 based on dragOffset (250px max width for swipe)
-                        const dragProgress = Math.min(Math.max(Math.abs(dragOffset) / 250, 0), 1);
-
-                        // Compute drag rotation, skew/curl, and z depth
-                        let dragRotateY = 0;
-                        let dragSkewY = 0;
-                        let dragZ = 0;
-
-                        if (isDragging && dragDirectionState) {
-                          const dir = dragDirectionState;
-                          if (isRTL) {
-                            if (dir === "next") {
-                              dragRotateY = dragProgress * -180;
-                              dragSkewY = Math.sin(dragProgress * Math.PI) * -16; // gorgeous curved page bend
-                            } else {
-                              dragRotateY = -180 + (dragProgress * 180);
-                              dragSkewY = Math.sin(dragProgress * Math.PI) * 16;
-                            }
+                      if (isDragging && dragDirectionState) {
+                        const dir = dragDirectionState;
+                        if (isRTL) {
+                          if (dir === "next") {
+                            dragRotateY = dragProgress * -180;
+                            dragSkewY = Math.sin(dragProgress * Math.PI) * -16; // gorgeous curved page bend
                           } else {
-                            if (dir === "next") {
-                              dragRotateY = dragProgress * -180;
-                              dragSkewY = Math.sin(dragProgress * Math.PI) * 16;
-                            } else {
-                              dragRotateY = 180 - (dragProgress * 180);
-                              dragSkewY = Math.sin(dragProgress * Math.PI) * -16;
-                            }
+                            dragRotateY = -180 + (dragProgress * 180);
+                            dragSkewY = Math.sin(dragProgress * Math.PI) * 16;
                           }
-                          dragZ = Math.sin(dragProgress * Math.PI) * 110; // realistic lifting depth
+                        } else {
+                          if (dir === "next") {
+                            dragRotateY = dragProgress * -180;
+                            dragSkewY = Math.sin(dragProgress * Math.PI) * 16;
+                          } else {
+                            dragRotateY = 180 - (dragProgress * 180);
+                            dragSkewY = Math.sin(dragProgress * Math.PI) * -16;
+                          }
                         }
+                        dragZ = Math.sin(dragProgress * Math.PI) * 110; // realistic lifting depth
+                      }
 
-                        const animateState = isDragging 
-                          ? { 
-                              rotateY: dragRotateY, 
-                              z: dragZ, 
-                              skewY: dragSkewY 
-                            } 
-                          : { 
-                              rotateY: isRTL 
-                                ? (flipDirection === "next" ? -180 : 0) 
-                                : (flipDirection === "next" ? -180 : 0),
-                              z: [0, 85, 0], // Lifts page towards viewer
-                              skewY: isRTL
-                                ? (flipDirection === "next" ? [0, -12, 0] : [0, 12, 0]) // Page curl bend
-                                : (flipDirection === "next" ? [0, 12, 0] : [0, -12, 0])
-                            };
+                      const animateState = isDragging 
+                        ? { 
+                            rotateY: dragRotateY, 
+                            z: dragZ, 
+                            skewY: dragSkewY 
+                          } 
+                        : { 
+                            rotateY: isRTL 
+                              ? (flipDirection === "next" ? -180 : 0) 
+                              : (flipDirection === "next" ? -180 : 0),
+                            z: [0, 85, 0], // Lifts page towards viewer
+                            skewY: isRTL
+                              ? (flipDirection === "next" ? [0, -12, 0] : [0, 12, 0]) // Page curl bend
+                              : (flipDirection === "next" ? [0, 12, 0] : [0, -12, 0])
+                          };
 
-                        const transitionState = isDragging 
-                          ? { type: "tween", ease: "easeOut", duration: 0.05 } // fast response
-                          : { duration: 0.55, ease: "easeInOut" }; // smooth automatic turn
+                      const transitionState = isDragging 
+                        ? { type: "tween", ease: "easeOut", duration: 0.05 } // fast response
+                        : { duration: 0.55, ease: "easeInOut" }; // smooth automatic turn
 
-                        return (
+                      return (
+                        <div className="flex w-full h-full" style={{ transformStyle: "preserve-3d" }}>
+                          
+                          {/* LEFT PAGE CONTAINER */}
+                          <div 
+                            onClick={() => {
+                              if (isRTL) handleNextPage();
+                              else handlePrevPage();
+                            }}
+                            className={`w-1/2 h-full relative rounded-r-none rounded-l-2xl border-4 border-r-0 shadow-2xl flex flex-col justify-between overflow-hidden transition-all transform-gpu cursor-pointer active:brightness-95 ${
+                              settings.darkMode 
+                                ? "bg-[#261F1A] border-[#3D322A]" 
+                                : "bg-[#FAF7EE] border-[#EADDC9]"
+                            }`}
+                            style={{
+                              transformOrigin: "right center"
+                            }}
+                          >
+                            {/* Shadow on inner spine */}
+                            <div className="absolute right-0 top-0 bottom-0 w-8 bg-gradient-to-l from-black/25 to-transparent pointer-events-none z-10"></div>
+                            <div className="absolute inset-0 bg-[radial-gradient(#5A5A40_0.5px,transparent_0.5px)] [background-size:16px_16px] opacity-5 pointer-events-none"></div>
+
+                            {/* Dynamic Ambient Shadow cast by the turning page onto Left page */}
+                            {isSheetActive && (
+                              <motion.div 
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: activeDirection === "next" ? (isRTL ? [0.35, 0.1, 0] : [0, 0.25, 0.45]) : (isRTL ? [0, 0.25, 0.45] : [0.35, 0.1, 0]) }}
+                                transition={transitionState}
+                                className="absolute inset-0 bg-gradient-to-r from-black/35 via-black/10 to-transparent pointer-events-none z-20 mix-blend-multiply"
+                              />
+                            )}
+
+                            {/* Page Content */}
+                            {doubleLeftPage ? (
+                              renderedPages[doubleLeftPage] ? (
+                                <img 
+                                  src={renderedPages[doubleLeftPage]} 
+                                  alt={`الصفحة ${doubleLeftPage}`} 
+                                  className="w-full h-full object-contain pointer-events-none"
+                                  referrerPolicy="no-referrer"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex flex-col items-center justify-center">
+                                  <span className="animate-pulse text-xs text-[#5A5A40]">جاري صقل الحروف... ({doubleLeftPage})</span>
+                                </div>
+                              )
+                            ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center opacity-30">
+                                <BookOpen className="w-12 h-12 text-[#5A5A40] mb-2" />
+                                <span className="text-xs">نهاية المجلد الأثرى</span>
+                              </div>
+                            )}
+
+                            {/* Page Indicator */}
+                            {doubleLeftPage && (
+                              <div className="absolute bottom-2.5 left-6 right-3 flex justify-between text-[10px] font-mono opacity-65">
+                                <span>{doubleLeftPage}</span>
+                                <span>{book.author}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* RIGHT PAGE CONTAINER */}
+                          <div 
+                            onClick={() => {
+                              if (isRTL) handlePrevPage();
+                              else handleNextPage();
+                            }}
+                            className={`w-1/2 h-full relative rounded-l-none rounded-r-2xl border-4 border-l-0 shadow-2xl flex flex-col justify-between overflow-hidden transition-all transform-gpu cursor-pointer active:brightness-95 ${
+                              settings.darkMode 
+                                ? "bg-[#261F1A] border-[#3D322A]" 
+                                : "bg-[#FAF7EE] border-[#EADDC9]"
+                            }`}
+                          >
+                            {/* Shadow on inner spine */}
+                            <div className="absolute left-0 top-0 bottom-0 w-8 bg-gradient-to-r from-black/25 to-transparent pointer-events-none z-10"></div>
+                            <div className="absolute inset-0 bg-[radial-gradient(#5A5A40_0.5px,transparent_0.5px)] [background-size:16px_16px] opacity-5 pointer-events-none"></div>
+
+                            {/* Dynamic Ambient Shadow cast by the turning page onto Right page */}
+                            {isSheetActive && (
+                              <motion.div 
+                                initial={{ opacity: 0 }}
+                                animate={{ opacity: activeDirection === "next" ? (isRTL ? [0, 0.25, 0.45] : [0.35, 0.1, 0]) : (isRTL ? [0.35, 0.1, 0] : [0, 0.25, 0.45]) }}
+                                transition={transitionState}
+                                className="absolute inset-0 bg-gradient-to-l from-black/35 via-black/10 to-transparent pointer-events-none z-20 mix-blend-multiply"
+                              />
+                            )}
+
+                            {/* Page Content */}
+                            {doubleRightPage ? (
+                              renderedPages[doubleRightPage] ? (
+                                <img 
+                                  src={renderedPages[doubleRightPage]} 
+                                  alt={`الصفحة ${doubleRightPage}`} 
+                                  className="w-full h-full object-contain pointer-events-none"
+                                  referrerPolicy="no-referrer"
+                                />
+                              ) : (
+                                <div className="w-full h-full flex flex-col items-center justify-center">
+                                  <span className="animate-pulse text-xs text-[#5A5A40]">جاري صقل الحروف... ({doubleRightPage})</span>
+                                </div>
+                              )
+                            ) : (
+                              <div className="w-full h-full flex flex-col items-center justify-center opacity-30">
+                                <span className="text-xs">بداية الغلاف</span>
+                              </div>
+                            )}
+
+                            {/* Page Indicator */}
+                            {doubleRightPage && (
+                              <div className="absolute bottom-2.5 left-3 right-6 flex justify-between text-[10px] font-mono opacity-65">
+                                <span>{book.title}</span>
+                                <span>{doubleRightPage}</span>
+                              </div>
+                            )}
+                          </div>
+
+                          {/* 3D CAST SHADOW UNDER THE FLIPPING SHEET */}
+                          <AnimatePresence>
+                            {isSheetActive && activeDirection && (
+                              <motion.div
+                                initial={{ 
+                                  rotateY: isRTL 
+                                    ? (activeDirection === "next" ? 0 : -180) 
+                                    : (activeDirection === "next" ? 0 : 180),
+                                  z: -8,
+                                  skewY: 0,
+                                  opacity: 0
+                                }}
+                                animate={animateState}
+                                transition={transitionState}
+                                style={{
+                                  position: "absolute",
+                                  width: "50%",
+                                  height: "100%",
+                                  top: 0,
+                                  left: isRTL ? 0 : "50%",
+                                  transformOrigin: isRTL ? "right center" : "left center",
+                                  transformStyle: "preserve-3d",
+                                  zIndex: 35, // just under the turning page sheet
+                                  pointerEvents: "none",
+                                  boxShadow: isRTL 
+                                    ? "-25px 25px 50px rgba(0,0,0,0.5), 15px 15px 35px rgba(0,0,0,0.3)"
+                                    : "25px 25px 50px rgba(0,0,0,0.5), -15px 15px 35px rgba(0,0,0,0.3)",
+                                  filter: "blur(14px)",
+                                }}
+                              />
+                            )}
+                          </AnimatePresence>
+
+                          {/* 3D FLIPPING PAGE SHEET (CSS preserve-3d animation layered absolutely on top) */}
                           <AnimatePresence>
                             {isSheetActive && activeDirection && (
                               <motion.div
@@ -2091,7 +2144,10 @@ export default function ThreeDFlipbook({
                                     borderRadius: isRTL ? "2px 12px 12px 2px" : "12px 2px 2px 12px"
                                   }}
                                 >
-                                  <div className="absolute inset-0 bg-gradient-to-r from-black/5 to-black/25 pointer-events-none"></div>
+                                  {/* Soft organic shading gradient and paper fiber texture */}
+                                  <div className="absolute inset-0 bg-gradient-to-r from-black/10 via-white/5 to-black/25 pointer-events-none z-20"></div>
+                                  <div className="absolute inset-0 bg-[radial-gradient(#5A5A40_0.5px,transparent_0.5px)] [background-size:16px_16px] opacity-5 pointer-events-none"></div>
+
                                   {/* Show next or prev page content based on directions */}
                                   {renderedPages[activeDirection === "next" ? currentPage + (isRTL ? 1 : 1) : currentPage - 1] ? (
                                     <img 
@@ -2120,7 +2176,10 @@ export default function ThreeDFlipbook({
                                     borderRadius: isRTL ? "12px 2px 2px 12px" : "2px 12px 12px 2px"
                                   }}
                                 >
-                                  <div className="absolute inset-0 bg-gradient-to-l from-black/5 to-black/25 pointer-events-none"></div>
+                                  {/* Soft organic shading gradient and paper fiber texture */}
+                                  <div className="absolute inset-0 bg-gradient-to-l from-black/10 via-white/5 to-black/25 pointer-events-none z-20"></div>
+                                  <div className="absolute inset-0 bg-[radial-gradient(#5A5A40_0.5px,transparent_0.5px)] [background-size:16px_16px] opacity-5 pointer-events-none"></div>
+
                                   {renderedPages[activeDirection === "next" ? currentPage + 2 : currentPage] ? (
                                     <img 
                                       src={renderedPages[activeDirection === "next" ? currentPage + 2 : currentPage]} 
@@ -2137,10 +2196,10 @@ export default function ThreeDFlipbook({
                               </motion.div>
                             )}
                           </AnimatePresence>
-                        );
-                      })()}
 
-                    </div>
+                        </div>
+                      );
+                    })()
                   )}
 
                   {/* Desktop Margin Touch Overlays for Easy Clicking */}
