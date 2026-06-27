@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { Book } from "../types";
 import { getGoogleDriveDirectLink, isValidUrl } from "../utils/driveParser";
-import { cacheBookBlob, removeCachedBookBlob, getCachedBookBlob } from "../utils/indexedDB";
+import { cacheBookBlob, removeCachedBookBlob, getCachedBookBlob, getAllCachedBookIds } from "../utils/indexedDB";
 import { 
   Plus, 
   BookOpen, 
@@ -232,6 +232,95 @@ export default function LibraryShelf({
 
   // Long-press detailed preview modal states
   const [previewBook, setPreviewBook] = useState<Book | null>(null);
+
+  // Cached Offline Book IDs State
+  const [cachedBookIds, setCachedBookIds] = useState<string[]>([]);
+  const [isPreviewBookCached, setIsPreviewBookCached] = useState<boolean>(false);
+  const [isCachingInProgress, setIsCachingInProgress] = useState<boolean>(false);
+  const [cachingError, setCachingError] = useState<string | null>(null);
+
+  const refreshCachedBooks = async () => {
+    try {
+      const ids = await getAllCachedBookIds();
+      setCachedBookIds(ids || []);
+    } catch (e) {
+      console.warn("Error loading cached books:", e);
+    }
+  };
+
+  useEffect(() => {
+    refreshCachedBooks();
+  }, [books]);
+
+  // Check if previewBook is cached when previewBook changes
+  useEffect(() => {
+    if (!previewBook) {
+      setIsPreviewBookCached(false);
+      setIsCachingInProgress(false);
+      setCachingError(null);
+      return;
+    }
+
+    const checkCache = async () => {
+      try {
+        const cached = await getCachedBookBlob(previewBook.id);
+        setIsPreviewBookCached(!!cached);
+      } catch (err) {
+        setIsPreviewBookCached(false);
+      }
+    };
+    checkCache();
+  }, [previewBook]);
+
+  // Download and cache remote PDF offline
+  const handleCacheBookOffline = async (book: Book) => {
+    if (!book.pdfUrl) {
+      alert("عذراً، هذا الكتاب لا يحتوي على رابط ملف صالح للتحميل.");
+      return;
+    }
+    setIsCachingInProgress(true);
+    setCachingError(null);
+    try {
+      // Fetch direct link if it's a google drive link
+      let fetchUrl = book.pdfUrl;
+      if (book.pdfUrl.includes("drive.google.com")) {
+        const directLink = getGoogleDriveDirectLink(book.pdfUrl);
+        if (directLink) {
+          fetchUrl = directLink;
+        }
+      }
+
+      const response = await fetch(fetchUrl);
+      if (!response.ok) {
+        throw new Error(`تعذر تحميل الملف من السيرفر. كود الخطأ: ${response.status}`);
+      }
+      const blob = await response.blob();
+      await cacheBookBlob(book.id, blob);
+      setIsPreviewBookCached(true);
+      await refreshCachedBooks();
+      alert("تم حفظ الكتاب بنجاح في ذاكرة المتصفح المحلية! يمكنك الآن تصفحه وقراءته بالكامل بدون الحاجة لاتصال بالإنترنت.");
+    } catch (err: any) {
+      console.error("Failed to cache book:", err);
+      setCachingError(err.message || "فشل التحميل من الرابط");
+      alert(`عذراً، فشل تحميل وحفظ الملف للقراءة دون اتصال. يرجى التأكد من اتصالك بالإنترنت والمحاولة مجدداً. الخطأ: ${err.message || ""}`);
+    } finally {
+      setIsCachingInProgress(false);
+    }
+  };
+
+  const handleRemoveBookCache = async (book: Book) => {
+    if (confirm("هل أنت متأكد من رغبتك في إزالة هذا الكتاب من الذاكرة المؤقتة لقراءته دون اتصال؟ (لن يتم حذف بيانات الكتاب أو الملاحظات، فقط ملف الـ PDF لتقليل استهلاك المساحة)")) {
+      try {
+        await removeCachedBookBlob(book.id);
+        setIsPreviewBookCached(false);
+        await refreshCachedBooks();
+        alert("تمت إزالة الملف بنجاح من الذاكرة المؤقتة.");
+      } catch (err) {
+        alert("فشل إزالة الملف.");
+      }
+    }
+  };
+
   const [longPressTimer, setLongPressTimer] = useState<any>(null);
   const [isLongPressTriggered, setIsLongPressTriggered] = useState<boolean>(false);
 
@@ -1301,6 +1390,20 @@ export default function LibraryShelf({
                           }`} 
                         />
                       </button>
+
+                      {/* Offline saved badge */}
+                      {cachedBookIds.includes(book.id) && (
+                        <div 
+                          className="absolute top-2.5 right-2.5 z-30 flex items-center justify-center p-1 px-1.5 rounded-full bg-emerald-600/95 text-white text-[8px] font-extrabold gap-0.5 shadow-sm border border-emerald-500/20 leading-none select-none"
+                          title="محفوظ ومتاح للقراءة بدون اتصال بالإنترنت"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                          }}
+                        >
+                          <span className="text-[7px]">✓</span>
+                          <span>دون اتصال</span>
+                        </div>
+                      )}
                       
                       {/* Playful Stickers on kids book cover */}
                       {isKidsBook && (
@@ -2061,6 +2164,62 @@ export default function LibraryShelf({
                             </button>
                           );
                         })}
+                      </div>
+                    )}
+                  </div>
+
+                  {/* Offline Cache Status and Button */}
+                  <div className="mt-4 pt-3 border-t border-dashed border-[#E6DCC8]">
+                    <h4 className="text-xs font-extrabold text-[#4A3B32] mb-2 flex items-center gap-1 flex-row-reverse">
+                      <span>التحميل والقراءة دون اتصال:</span>
+                    </h4>
+                    
+                    {isPreviewBookCached ? (
+                      <div className="flex flex-col gap-2">
+                        <div className="flex items-center justify-between bg-emerald-50 border border-emerald-100 rounded-xl p-2.5 text-right flex-row-reverse">
+                          <div className="flex items-center gap-2 flex-row-reverse">
+                            <span className="text-emerald-600 text-sm">✓</span>
+                            <div>
+                              <p className="text-[11px] font-bold text-emerald-800 leading-none text-right">جاهز للقراءة بدون إنترنت</p>
+                              <p className="text-[9px] text-emerald-600/80 mt-0.5 text-right font-semibold">تم حفظ نسخة كاملة بأمان في ذاكرة جهازك</p>
+                            </div>
+                          </div>
+                          
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveBookCache(previewBook)}
+                            className="text-[9px] font-bold text-rose-600 hover:text-rose-800 hover:bg-rose-50 px-2 py-1 rounded-lg border border-rose-100 transition-colors"
+                          >
+                            إلغاء الحفظ
+                          </button>
+                        </div>
+                      </div>
+                    ) : (
+                      <div className="flex flex-col gap-2">
+                        {isCachingInProgress ? (
+                          <div className="bg-amber-50/75 border border-amber-100 rounded-xl p-2.5 text-center">
+                            <div className="flex items-center justify-center gap-2 flex-row-reverse">
+                              <span className="w-3.5 h-3.5 border-2 border-[#5A5A40] border-t-transparent rounded-full animate-spin"></span>
+                              <span className="text-[11px] font-bold text-[#5A5A40]">جاري تحميل وحفظ الكتاب بالكامل... يرجى الانتظار</span>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="flex flex-col sm:flex-row items-center justify-between gap-3 bg-[#FAF5EC]/50 border border-[#E6DCC8]/60 rounded-xl p-2.5 flex-row-reverse">
+                            <p className="text-[10px] text-stone-500 text-right leading-relaxed max-w-xs font-semibold">
+                              هذا الكتاب متاح أونلاين. يمكنك تحميله وحفظه في ذاكرة جهازك لقراءته في أي وقت بدون إنترنت (مثال: أثناء انقطاع الشبكة).
+                            </p>
+                            <button
+                              type="button"
+                              onClick={() => handleCacheBookOffline(previewBook)}
+                              className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 px-3 py-2 rounded-lg bg-[#5A5A40] hover:bg-[#4A4A32] text-white text-[11px] font-extrabold transition-all shadow-sm"
+                            >
+                              <span>📥 حفظ للقراءة دون اتصال</span>
+                            </button>
+                          </div>
+                        )}
+                        {cachingError && (
+                          <p className="text-[9px] text-red-600 font-bold mt-1 text-right">⚠️ خطأ: {cachingError}</p>
+                        )}
                       </div>
                     )}
                   </div>

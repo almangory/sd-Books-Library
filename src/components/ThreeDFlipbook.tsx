@@ -204,6 +204,13 @@ export default function ThreeDFlipbook({
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isFallbackGenerated, setIsFallbackGenerated] = useState<boolean>(false);
   
+  // Zoom Pinching States
+  const [isPinching, setIsPinching] = useState<boolean>(false);
+  const settingsRef = useRef(settings);
+  useEffect(() => {
+    settingsRef.current = settings;
+  }, [settings]);
+  
   // Audio state
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
 
@@ -512,23 +519,24 @@ export default function ThreeDFlipbook({
 
     let initialDist = 0;
     let initialZoom = 100;
-    let isPinching = false;
+    let isPinchingActive = false;
 
     const handleTouchStart = (e: TouchEvent) => {
       if (e.touches.length === 2) {
-        isPinching = true;
+        isPinchingActive = true;
+        setIsPinching(true);
         const touch1 = e.touches[0];
         const touch2 = e.touches[1];
         initialDist = Math.hypot(
           touch1.clientX - touch2.clientX,
           touch1.clientY - touch2.clientY
         );
-        initialZoom = settings.zoom;
+        initialZoom = settingsRef.current.zoom;
       }
     };
 
     const handleTouchMove = (e: TouchEvent) => {
-      if (isPinching && e.touches.length === 2) {
+      if (isPinchingActive && e.touches.length === 2) {
         const touch1 = e.touches[0];
         const touch2 = e.touches[1];
         const currentDist = Math.hypot(
@@ -550,8 +558,11 @@ export default function ThreeDFlipbook({
     };
 
     const handleTouchEnd = () => {
-      isPinching = false;
-      initialDist = 0;
+      if (isPinchingActive) {
+        isPinchingActive = false;
+        setIsPinching(false);
+        initialDist = 0;
+      }
     };
 
     container.addEventListener("touchstart", handleTouchStart, { passive: false });
@@ -565,7 +576,7 @@ export default function ThreeDFlipbook({
       container.removeEventListener("touchend", handleTouchEnd);
       container.removeEventListener("touchcancel", handleTouchEnd);
     };
-  }, [isBookLoaded, settings.zoom, setSettings]);
+  }, [isBookLoaded, setSettings]);
 
   // Dynamically calculate fitted width and height to maintain exact PDF page ratio
   const getFittedBookStyle = () => {
@@ -1839,7 +1850,7 @@ export default function ThreeDFlipbook({
               }}
             >
               <div 
-                className="relative flex items-center justify-center transition-transform duration-300"
+                className={`relative flex items-center justify-center ${isPinching ? "" : "transition-transform duration-300"}`}
                 style={{
                   transformStyle: "preserve-3d",
                   transform: `scale(${settings.zoom / 100})`,

@@ -80,3 +80,25 @@ export async function removeCachedBookBlob(bookId: string): Promise<void> {
     console.error("IndexedDB Delete Error:", error);
   }
 }
+
+export async function getAllCachedBookIds(): Promise<string[]> {
+  try {
+    const db = await initOfflineDB();
+    return new Promise((resolve, reject) => {
+      const transaction = db.transaction(STORE_NAME, "readonly");
+      const store = transaction.objectStore(STORE_NAME);
+      const request = store.getAllKeys();
+
+      request.onsuccess = () => {
+        resolve((request.result as string[]) || []);
+      };
+      request.onerror = () => {
+        reject(new Error("Failed to retrieve cached book keys"));
+      };
+    });
+  } catch (error) {
+    console.error("IndexedDB keys fetch error:", error);
+    return [];
+  }
+}
+
