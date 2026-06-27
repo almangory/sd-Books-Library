@@ -337,7 +337,7 @@ export default function App() {
             className="flex items-center gap-1 hover:text-red-300 transition-all font-semibold"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span>خروج من البرنامج</span>
+            <span> الرجوع للمنصة</span>
           </button>
           
           <div className="flex items-center gap-1.5 opacity-85 font-mono">

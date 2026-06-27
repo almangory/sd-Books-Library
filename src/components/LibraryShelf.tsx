@@ -1150,7 +1150,7 @@ export default function LibraryShelf({
             </span>
           </h2>
           {activeTab === "all" && searchQuery.trim() === "" ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-y-16 gap-x-6 md:gap-x-8">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-y-16 gap-x-6 md:gap-x-8">
               {/* Render the 4 main departments as physical Books on the shelf */}
               {[
                 {
