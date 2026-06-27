@@ -505,6 +505,68 @@ export default function ThreeDFlipbook({
     };
   }, [isBookLoaded]);
 
+  // Pinch-to-zoom on mobile devices with 2 fingers
+  useEffect(() => {
+    const container = containerRef.current;
+    if (!container) return;
+
+    let initialDist = 0;
+    let initialZoom = 100;
+    let isPinching = false;
+
+    const handleTouchStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        isPinching = true;
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        initialDist = Math.hypot(
+          touch1.clientX - touch2.clientX,
+          touch1.clientY - touch2.clientY
+        );
+        initialZoom = settings.zoom;
+      }
+    };
+
+    const handleTouchMove = (e: TouchEvent) => {
+      if (isPinching && e.touches.length === 2) {
+        const touch1 = e.touches[0];
+        const touch2 = e.touches[1];
+        const currentDist = Math.hypot(
+          touch1.clientX - touch2.clientX,
+          touch1.clientY - touch2.clientY
+        );
+        
+        if (initialDist > 0) {
+          const scale = currentDist / initialDist;
+          // Scale between 100% and 300%
+          const targetZoom = Math.max(100, Math.min(300, Math.round(initialZoom * scale)));
+          setSettings(prev => ({ ...prev, zoom: targetZoom }));
+        }
+        
+        if (e.cancelable) {
+          e.preventDefault();
+        }
+      }
+    };
+
+    const handleTouchEnd = () => {
+      isPinching = false;
+      initialDist = 0;
+    };
+
+    container.addEventListener("touchstart", handleTouchStart, { passive: false });
+    container.addEventListener("touchmove", handleTouchMove, { passive: false });
+    container.addEventListener("touchend", handleTouchEnd);
+    container.addEventListener("touchcancel", handleTouchEnd);
+
+    return () => {
+      container.removeEventListener("touchstart", handleTouchStart);
+      container.removeEventListener("touchmove", handleTouchMove);
+      container.removeEventListener("touchend", handleTouchEnd);
+      container.removeEventListener("touchcancel", handleTouchEnd);
+    };
+  }, [isBookLoaded, settings.zoom, setSettings]);
+
   // Dynamically calculate fitted width and height to maintain exact PDF page ratio
   const getFittedBookStyle = () => {
     if (!isBookLoaded || containerSize.width === 0 || containerSize.height === 0) {
@@ -560,7 +622,7 @@ export default function ThreeDFlipbook({
     }
   }, [settings.readingMode]);
 
-  // Web Audio synthesized paper turning effect (Highly realistic paper model)
+  // Web Audio synthesized paper turning effect (Highly realistic physical model of page rustling, flipping, and landing)
   const playPageTurnSound = () => {
     if (!soundEnabled) return;
     try {
@@ -576,7 +638,7 @@ export default function ThreeDFlipbook({
         data[i] = Math.random() * 2 - 1;
       }
       
-      // Node 1: Crisp "Flick/Crinkle" at the very beginning of the page turn
+      // Node 1: Crisp "Flick/Crinkle" at the very beginning of the page turn (finger grip friction)
       const crispNoise = ctx.createBufferSource();
       crispNoise.buffer = buffer;
       
@@ -587,7 +649,7 @@ export default function ThreeDFlipbook({
       
       const crispGain = ctx.createGain();
       crispGain.gain.setValueAtTime(0.001, ctx.currentTime);
-      crispGain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 0.03); // quick snap attack
+      crispGain.gain.linearRampToValueAtTime(0.07, ctx.currentTime + 0.03); // quick snap attack
       crispGain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.18); // very quick fade out
       
       crispNoise.connect(highpass);
@@ -600,13 +662,13 @@ export default function ThreeDFlipbook({
       
       const bandpass = ctx.createBiquadFilter();
       bandpass.type = "bandpass";
-      bandpass.frequency.setValueAtTime(1100, ctx.currentTime); // mid-range rustling frequency
+      bandpass.frequency.setValueAtTime(1200, ctx.currentTime); // mid-range rustling frequency
       bandpass.frequency.exponentialRampToValueAtTime(320, ctx.currentTime + duration);
       bandpass.Q.setValueAtTime(3.0, ctx.currentTime);
       
       const rustleGain = ctx.createGain();
       rustleGain.gain.setValueAtTime(0.001, ctx.currentTime);
-      rustleGain.gain.linearRampToValueAtTime(0.09, ctx.currentTime + 0.12); // smooth build-up
+      rustleGain.gain.linearRampToValueAtTime(0.08, ctx.currentTime + 0.12); // smooth build-up
       rustleGain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
       
       rustleNoise.connect(bandpass);
@@ -616,24 +678,62 @@ export default function ThreeDFlipbook({
       // Node 3: Deep "Air Whoosh" representing the air displacement of the heavy paper sheet
       const whooshOsc = ctx.createOscillator();
       whooshOsc.type = "triangle"; // soft, deep, and organic wave
-      whooshOsc.frequency.setValueAtTime(140, ctx.currentTime); // deeper register
+      whooshOsc.frequency.setValueAtTime(130, ctx.currentTime); // deeper register
       whooshOsc.frequency.exponentialRampToValueAtTime(45, ctx.currentTime + duration - 0.05);
       
       const whooshGain = ctx.createGain();
       whooshGain.gain.setValueAtTime(0.001, ctx.currentTime);
-      whooshGain.gain.linearRampToValueAtTime(0.05, ctx.currentTime + 0.22); // peaked as page lifts half-way
+      whooshGain.gain.linearRampToValueAtTime(0.04, ctx.currentTime + 0.22); // peaked as page lifts half-way
       whooshGain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + duration);
       
       whooshOsc.connect(whooshGain);
       whooshGain.connect(ctx.destination);
+
+      // Node 4: Soft Physical Landing Thup (Lowpass-filtered noise + soft bass sine thud)
+      // This represents the page hitting the rest of the pages on the opposite side, which is very prominent in the video
+      const landingOsc = ctx.createOscillator();
+      landingOsc.type = "sine";
+      landingOsc.frequency.setValueAtTime(80, ctx.currentTime);
+      landingOsc.frequency.setValueAtTime(80, ctx.currentTime + 0.38);
+      landingOsc.frequency.exponentialRampToValueAtTime(35, ctx.currentTime + 0.58);
+      
+      const landingOscGain = ctx.createGain();
+      landingOscGain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      landingOscGain.gain.setValueAtTime(0.0001, ctx.currentTime + 0.38);
+      landingOscGain.gain.linearRampToValueAtTime(0.12, ctx.currentTime + 0.44); // soft landing thud peak
+      landingOscGain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.58);
+      
+      landingOsc.connect(landingOscGain);
+      landingOscGain.connect(ctx.destination);
+
+      // Soft lowpass noise thud component
+      const thudNoise = ctx.createBufferSource();
+      thudNoise.buffer = buffer;
+      
+      const lowpassFilter = ctx.createBiquadFilter();
+      lowpassFilter.type = "lowpass";
+      lowpassFilter.frequency.setValueAtTime(130, ctx.currentTime);
+      
+      const thudGain = ctx.createGain();
+      thudGain.gain.setValueAtTime(0.0001, ctx.currentTime);
+      thudGain.gain.setValueAtTime(0.0001, ctx.currentTime + 0.38);
+      thudGain.gain.linearRampToValueAtTime(0.14, ctx.currentTime + 0.44); // soft rustle landing impact peak
+      thudGain.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 0.58);
+      
+      thudNoise.connect(lowpassFilter);
+      lowpassFilter.connect(thudGain);
+      thudGain.connect(ctx.destination);
       
       // Start all sound components in perfect synchronization
       crispNoise.start();
       rustleNoise.start();
       whooshOsc.start();
+      landingOsc.start();
+      thudNoise.start();
       
-      // Stop oscillator
+      // Stop oscillators
       whooshOsc.stop(ctx.currentTime + duration);
+      landingOsc.stop(ctx.currentTime + 0.60);
     } catch (e) {
       console.warn("Audio Context blocked or unsupported:", e);
     }
@@ -1140,12 +1240,14 @@ export default function ThreeDFlipbook({
   // Mouse Drag / Touch Swipe gesture handling
   const handleTouchStart = (e: React.TouchEvent | React.MouseEvent) => {
     if (isFlipping) return;
+    if (settings.zoom > 100) return; // Allow normal scroll/pan when zoomed
     const clientX = "touches" in e ? e.touches[0].clientX : e.clientX;
     dragStartX.current = clientX;
     isMouseDown.current = true;
   };
 
   const handleTouchMove = (e: React.TouchEvent | React.MouseEvent) => {
+    if (settings.zoom > 100) return; // Allow normal scroll/pan when zoomed
     if (dragStartX.current === null) return;
     if (e.type === "mousemove" && !isMouseDown.current) return;
 
@@ -1433,101 +1535,7 @@ export default function ThreeDFlipbook({
                 </button>
               </div>
 
-              {/* Text-to-Speech Control */}
-              <div className="relative flex items-center gap-1">
-                <button
-                  onClick={handleSpeakCurrentPage}
-                  disabled={isExtractingText}
-                  className={`p-2 rounded-lg transition-all flex items-center gap-1.5 ${
-                    isSpeaking
-                      ? "bg-[#9E4233] text-white animate-pulse"
-                      : settings.darkMode ? "bg-[#3A3029]/80 hover:bg-[#3A3029] text-[#EADDC9]" : "bg-[#E6E0D4] hover:bg-[#DFCDB0] text-[#4A3B32]"
-                  }`}
-                  title={isSpeaking ? "إيقاف القراءة الصوتية" : "استمع لهذه الصفحة (قراءة صوتية)"}
-                >
-                  {isExtractingText ? (
-                    <Loader2 className="w-4.5 h-4.5 animate-spin" />
-                  ) : isSpeaking ? (
-                    <Pause className="w-4.5 h-4.5" />
-                  ) : (
-                    <Headphones className="w-4.5 h-4.5" />
-                  )}
-                  <span className="text-xs hidden md:inline">
-                    {isExtractingText ? "جاري استخراج النص..." : isSpeaking ? "إيقاف القراءة" : "قراءة صوتية"}
-                  </span>
-                </button>
 
-                {/* TTS Settings Toggle Button */}
-                <button
-                  onClick={() => setShowTtsSettings(!showTtsSettings)}
-                  className={`p-2 rounded-lg transition-all ${
-                    showTtsSettings
-                      ? "bg-[#5A5A40] text-white"
-                      : settings.darkMode ? "bg-[#3A3029]/80 hover:bg-[#3A3029] text-[#EADDC9]" : "bg-[#E6E0D4] hover:bg-[#DFCDB0] text-[#4A3B32]"
-                  }`}
-                  title="إعدادات الصوت"
-                >
-                  <Settings className="w-4 h-4" />
-                </button>
-
-                {/* Floating TTS Settings Popover */}
-                {showTtsSettings && (
-                  <div className={`absolute bottom-full mb-2 right-0 z-50 w-56 p-4 rounded-xl shadow-2xl border ${
-                    settings.darkMode 
-                      ? "bg-[#2B211C] border-[#4A3B32] text-[#EADDC9]" 
-                      : "bg-white border-[#E6E0D4] text-[#4A3B32]"
-                  } text-right animate-fade-in`}>
-                    <div className="flex items-center justify-between gap-2 border-b border-[#E6E0D4]/20 pb-2 mb-3">
-                      <button 
-                        onClick={() => setShowTtsSettings(false)}
-                        className="p-1 rounded hover:bg-black/10 text-xs"
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                      <h4 className="text-xs font-bold font-serif flex items-center gap-1.5 justify-end">
-                        <Settings className="w-3.5 h-3.5 text-[#9E4233]" />
-                        <span>إعدادات القارئ الصوتي</span>
-                      </h4>
-                    </div>
-
-                    {/* Speed / Rate control */}
-                    <div className="mb-3.5">
-                      <label className="block text-[10px] font-bold opacity-75 mb-1.5">سرعة الصوت (نبرة القراءة):</label>
-                      <div className="flex items-center gap-2">
-                        <span className="text-[10px] font-mono w-8 text-left">{ttsSpeed}x</span>
-                        <input 
-                          type="range" 
-                          min="0.5" 
-                          max="2.0" 
-                          step="0.1" 
-                          value={ttsSpeed}
-                          onChange={(e) => setTtsSpeed(parseFloat(e.target.value))}
-                          className="flex-1 h-1.5 bg-[#E6E0D4] rounded-lg appearance-none cursor-pointer accent-[#9E4233]"
-                        />
-                      </div>
-                    </div>
-
-                    {/* Language Selection */}
-                    <div>
-                      <label className="block text-[10px] font-bold opacity-75 mb-1.5">لغة القراءة والصوت:</label>
-                      <select
-                        value={ttsLang}
-                        onChange={(e) => setTtsLang(e.target.value)}
-                        className={`w-full text-xs p-1.5 rounded-lg border focus:outline-none focus:ring-1 focus:ring-[#5A5A40] ${
-                          settings.darkMode 
-                            ? "bg-[#3D2F27] border-[#4A3B32] text-[#EADDC9]" 
-                            : "bg-white border-[#E6E0D4] text-[#4A3B32]"
-                        }`}
-                      >
-                        <option value="auto">تعرف تلقائي (عربي/إنجليزي)</option>
-                        <option value="ar-SA">العربية (السعودية) 🇸🇦</option>
-                        <option value="en-US">الإنجليزية (أمريكا) 🇺🇸</option>
-                        <option value="fr-FR">الفرنسية (فرنسا) 🇫🇷</option>
-                      </select>
-                    </div>
-                  </div>
-                )}
-              </div>
 
               {/* Bookmark Toggle (Adds/removes bookmark for current page) */}
               <button
@@ -1735,7 +1743,9 @@ export default function ThreeDFlipbook({
 
         {/* Center Canvas Workspace for Book View */}
         <main 
-          className={`flex-1 flex flex-col items-center justify-center relative overflow-hidden select-none transition-all duration-300 ${
+          className={`flex-1 flex flex-col items-center justify-center relative select-none transition-all duration-300 ${
+            settings.zoom > 100 ? "overflow-auto scrollbar-thin" : "overflow-hidden"
+          } ${
             settings.readingMode ? "p-[10px]" : "p-4 lg:p-8"
           }`}
           onTouchStart={handleTouchStart}

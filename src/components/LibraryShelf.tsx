@@ -23,7 +23,9 @@ import {
   Wifi,
   WifiOff,
   Maximize,
-  Minimize
+  Minimize,
+  Search,
+  X
 } from "lucide-react";
 
 interface LibraryShelfProps {
@@ -122,6 +124,7 @@ export default function LibraryShelf({
   // Sorting & Tagging States
   const [sortBy, setSortBy] = useState<"date" | "alphabet">("date");
   const [selectedTag, setSelectedTag] = useState<string>("all");
+  const [searchQuery, setSearchQuery] = useState<string>("");
 
   // Comma-separated tag input string states for modals
   const [newTagsStr, setNewTagsStr] = useState<string>("");
@@ -182,7 +185,17 @@ export default function LibraryShelf({
       });
     }
 
-    // 3. Sort by date added or alphabetically
+    // 3. Filter by search query (title or author)
+    if (searchQuery.trim() !== "") {
+      const query = searchQuery.trim().toLowerCase();
+      list = list.filter(book => {
+        const titleMatch = book.title ? book.title.toLowerCase().includes(query) : false;
+        const authorMatch = book.author ? book.author.toLowerCase().includes(query) : false;
+        return titleMatch || authorMatch;
+      });
+    }
+
+    // 4. Sort by date added or alphabetically
     return [...list].sort((a, b) => {
       if (sortBy === "alphabet") {
         return a.title.localeCompare(b.title, "ar", { sensitivity: "base" });
@@ -191,7 +204,7 @@ export default function LibraryShelf({
         return (b.addedAt || 0) - (a.addedAt || 0);
       }
     });
-  }, [books, activeTab, selectedTag, sortBy]);
+  }, [books, activeTab, selectedTag, sortBy, searchQuery]);
 
   // Help tips toggler
   const [showHelp, setShowHelp] = useState<boolean>(false);
@@ -412,11 +425,42 @@ export default function LibraryShelf({
     setErrorMsg(null);
   };
 
-  // Dynamic aesthetic generator for abstract book cover colors representing Sudanese Earth tones
-  const getTraditionalCoverColors = (title: string, id: string) => {
+  // Dynamic aesthetic generator for abstract book cover colors representing Sudanese Earth tones or colorful kids stories
+  const getTraditionalCoverColors = (title: string, id: string, category?: string) => {
     // Generate simple seed based on characters
     const val = (title.length + id.charCodeAt(id.length - 1 || 0)) % 4;
     
+    if (category === "children") {
+      // Cheerful, kids-friendly colors for children's books to inspire them!
+      const kidsPalettes = [
+        {
+          bg: "bg-gradient-to-br from-[#FF6B6B] via-[#FF8E53] to-[#FFD254]", // Cheerful sunburst
+          accent: "border-[#FFF9C4]",
+          banner: "bg-[#FFEB3B] text-[#9E2A2B]",
+          text: "text-[#9E2A2B]"
+        },
+        {
+          bg: "bg-gradient-to-br from-[#4E65FF] to-[#92EFFD]", // Magic bright blue/lagoon
+          accent: "border-[#E0F7FA]",
+          banner: "bg-[#00E676] text-neutral-900",
+          text: "text-neutral-900"
+        },
+        {
+          bg: "bg-gradient-to-br from-[#AB47BC] via-[#EC407A] to-[#FF7043]", // Magical pink/violet fairy tale
+          accent: "border-[#FCE4EC]",
+          banner: "bg-[#FFEB3B] text-neutral-900",
+          text: "text-neutral-900"
+        },
+        {
+          bg: "bg-gradient-to-br from-[#9CCC65] via-[#D4E157] to-[#80DEEA]", // Bright playful nature green
+          accent: "border-[#F1F8E9]",
+          banner: "bg-[#E91E63] text-white",
+          text: "text-white"
+        }
+      ];
+      return kidsPalettes[val];
+    }
+
     // Warm Sudanese traditional color palettes
     const palettes = [
       {
@@ -667,8 +711,31 @@ export default function LibraryShelf({
           </div>
 
           {/* Sorting and Tagging Controls Row */}
-          <div className="mb-8 flex flex-col md:flex-row gap-4 items-center justify-between p-4 bg-[#FAF5EC]/70 rounded-2xl border border-[#E6E0D4] text-xs">
-            <div className="flex flex-wrap items-center gap-3 w-full md:w-auto justify-end flex-row-reverse">
+          <div className="mb-8 flex flex-col lg:flex-row gap-4 items-center justify-between p-4 bg-[#FAF5EC]/70 rounded-2xl border border-[#E6E0D4] text-xs">
+            {/* Search Input */}
+            <div className="relative w-full lg:w-80 flex items-center">
+              <input
+                type="text"
+                placeholder="ابحث عن اسم الكتاب أو المؤلف..."
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
+                className="w-full bg-white border border-[#E6E0D4] rounded-xl pl-10 pr-8 py-2 text-right text-xs text-[#4A3B32] font-semibold placeholder-[#8D7B68]/50 focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/35 focus:border-[#5A5A40] transition-all"
+                dir="rtl"
+              />
+              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8D7B68]/60 pointer-events-none">
+                <Search className="w-4 h-4" />
+              </div>
+              {searchQuery && (
+                <button
+                  onClick={() => setSearchQuery("")}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8D7B68]/60 hover:text-[#9E4233] transition-colors"
+                >
+                  <X className="w-3.5 h-3.5" />
+                </button>
+              )}
+            </div>
+
+            <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-end flex-row-reverse">
               <span className="font-bold text-[#6D4C41] shrink-0">۞ خيارات التصفية والفرز:</span>
               
               <div className="flex items-center gap-1.5 flex-row-reverse">
@@ -700,7 +767,7 @@ export default function LibraryShelf({
               )}
             </div>
 
-            <div className="text-[#8D7B68] text-[11px] font-medium text-right md:text-left w-full md:w-auto">
+            <div className="text-[#8D7B68] text-[11px] font-medium text-right lg:text-left w-full lg:w-auto">
               عدد الكتب المعروضة: <span className="font-bold text-[#9E4233]">{sortedAndFilteredBooks.length}</span> كتاب
             </div>
           </div>
@@ -716,8 +783,135 @@ export default function LibraryShelf({
               {selectedTag !== "all" && ` • مجموعة (${selectedTag})`}
             </span>
           </h2>
+          {activeTab === "all" && searchQuery.trim() === "" ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-y-16 gap-x-6 md:gap-x-8">
+              {/* Render the 4 main departments as physical Books on the shelf */}
+              {[
+                {
+                  id: "curriculum",
+                  title: "مناهج وزارة التربية والتعليم",
+                  description: "المناهج المدرسية الرسمية والكتب التعليمية لمختلف المراحل الدراسية في السودان.",
+                  icon: "🏫",
+                  badge: "المكتبة الأكاديمية",
+                  count: books.filter(b => b.category === "curriculum").length,
+                  bg: "bg-gradient-to-br from-[#1b4d3e] to-[#0f2d24]",
+                  banner: "bg-[#FFD54F] text-stone-900 font-extrabold",
+                  accent: "border-[#FFD54F]/50 text-[#FFD54F]",
+                  motif: "🎓",
+                  leaningClass: "origin-bottom -rotate-3 hover:rotate-0 hover:scale-105 hover:-translate-y-3"
+                },
+                {
+                  id: "children",
+                  title: "كتب وحكايات الأطفال",
+                  description: "مملكة الصغار! قصص مصورة ومغامرات شيقة وممتعة تنمي عقول أبطالنا وبراعمنا.",
+                  icon: "🧸⭐🎈",
+                  badge: "مملكة البراعم 🎈",
+                  count: books.filter(b => b.category === "children").length,
+                  bg: "bg-gradient-to-br from-[#FF4E50] via-[#F9D423] to-[#FF4E50]", // Bright vibrant warm candy gradient
+                  banner: "bg-white text-rose-600 font-extrabold shadow-md border-2 border-rose-100 animate-pulse",
+                  accent: "border-white/65 text-yellow-300",
+                  motif: "🧸",
+                  leaningClass: "origin-bottom rotate-3 hover:rotate-0 hover:scale-105 hover:-translate-y-3",
+                  isKids: true
+                },
+                {
+                  id: "religious",
+                  title: "المكتبة الدينية والشرعية",
+                  description: "المصاحف الشريفة، التفسير، السيرة النبوية العطرة، ومخطوطات العلوم الشرعية.",
+                  icon: "🕌",
+                  badge: "العلوم الإسلامية",
+                  count: books.filter(b => b.category === "religious").length,
+                  bg: "bg-gradient-to-br from-[#06331e] via-[#0b5331] to-[#041a10]",
+                  banner: "bg-[#D4A373] text-stone-900 font-bold",
+                  accent: "border-[#D4A373]/60 text-amber-200",
+                  motif: "🕌",
+                  leaningClass: "origin-bottom -rotate-1.5 hover:rotate-0 hover:scale-105 hover:-translate-y-3"
+                },
+                {
+                  id: "general",
+                  title: "الكتب العامة وروايات الأدب",
+                  description: "روايات عالمية ومحلية، دواوين الشعر العربي والسوداني الخالد، وكتب التاريخ والثقافة.",
+                  icon: "🖋️",
+                  badge: "الأدب والثقافة",
+                  count: books.filter(b => b.category === "general" || !b.category).length,
+                  bg: "bg-gradient-to-br from-[#5D4037] to-[#2B1B17]",
+                  banner: "bg-[#9E4233] text-white font-bold",
+                  accent: "border-[#D4A373]/50 text-amber-100",
+                  motif: "🖋️",
+                  leaningClass: "origin-bottom rotate-2 hover:rotate-0 hover:scale-105 hover:-translate-y-3"
+                }
+              ].map((dept) => {
+                return (
+                  <div key={dept.id} className="flex flex-col group relative pb-10">
+                    <div className="relative aspect-[3/4] w-full z-10">
+                      <div 
+                        onClick={() => {
+                          setActiveTab(dept.id);
+                          setSelectedTag("all");
+                        }}
+                        className={`cursor-pointer absolute inset-0 rounded-r-xl rounded-l-md shadow-lg hover:shadow-2xl transition-all duration-300 transform preserve-3d overflow-hidden flex flex-col justify-between p-4 border-r border-[#ffffff30] z-10 ${dept.leaningClass} ${
+                          dept.isKids ? "ring-4 ring-yellow-400/30 hover:ring-yellow-400/60 transition-all duration-300" : ""
+                        }`}
+                      >
+                        <div className={`absolute inset-0 ${dept.bg} z-0`}></div>
+                        
+                        {/* Playful floating elements for kids category */}
+                        {dept.isKids && (
+                          <>
+                            <div className="absolute top-1 right-1 text-2xl animate-bounce z-20" style={{ animationDuration: "3s" }}>🎈</div>
+                            <div className="absolute bottom-2 left-1 text-2xl animate-spin z-20" style={{ animationDuration: "12s" }}>⭐</div>
+                          </>
+                        )}
 
-          {sortedAndFilteredBooks.length === 0 ? (
+                        <div className="absolute inset-2 border-2 border-dashed border-white/20 rounded-lg z-0 pointer-events-none"></div>
+                        <div className="absolute left-0 top-0 bottom-0 w-3.5 bg-gradient-to-r from-black/55 to-transparent z-10"></div>
+                        <div className="absolute left-[3px] top-0 bottom-0 w-[1px] bg-white/20 z-10"></div>
+
+                        <div className="relative z-10 flex-1 flex flex-col justify-between h-full">
+                          <div className={`py-1 px-2 rounded-md text-center text-[10px] font-extrabold tracking-wider ${dept.banner} truncate uppercase max-w-full`}>
+                            {dept.badge}
+                          </div>
+
+                          <div className="my-auto text-center py-2 px-1">
+                            <span className="text-3xl filter drop-shadow mb-2 block">{dept.icon}</span>
+                            <p className="font-serif font-extrabold text-xs md:text-sm text-yellow-50 leading-snug tracking-wide line-clamp-2">
+                              {dept.title}
+                            </p>
+                            <p className="text-[10px] text-amber-100/70 mt-1 line-clamp-2 leading-relaxed">
+                              {dept.description}
+                            </p>
+                          </div>
+
+                          <div className="mx-auto mt-2 text-center">
+                            <span className="inline-block px-3 py-1 bg-black/30 rounded-full border border-white/10 text-[10px] font-bold text-amber-200">
+                              📚 {dept.count} كتاباً متاحاً
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="absolute right-0 top-0 bottom-0 w-1 bg-gradient-to-l from-white/30 to-transparent z-10"></div>
+                      </div>
+
+                      {/* Wooden Shelf */}
+                      <div className="absolute bottom-[-14px] left-[-12px] right-[-12px] md:left-[-16px] md:right-[-16px] h-6 bg-gradient-to-b from-[#A05C3F] via-[#7B3F27] to-[#4A2010] rounded-sm shadow-[0_12px_18px_rgba(0,0,0,0.55),0_3px_5px_rgba(0,0,0,0.25)] z-0 border-b border-black/50">
+                        <div className="absolute top-0 left-0 right-0 h-[4px] bg-[#C18260] opacity-80 border-b border-black/25"></div>
+                        <div className="absolute inset-0 bg-repeat-x bg-[linear-gradient(90deg,rgba(255,255,255,0.06)_1px,transparent_1px)] [background-size:25px_100%] opacity-25"></div>
+                      </div>
+                    </div>
+
+                    <div className="mt-8 text-right z-10 px-1">
+                      <h3 className={`font-bold text-xs line-clamp-1 text-[#4A3B32] ${dept.isKids ? "text-rose-600 font-extrabold text-sm" : ""}`}>
+                        {dept.title}
+                      </h3>
+                      <p className="text-[10px] opacity-75 line-clamp-1 mt-0.5">
+                        اضغط لفتح هذا القسم وتصفحه
+                      </p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : sortedAndFilteredBooks.length === 0 ? (
             <div className="text-center py-16 px-4 bg-[#FAF5EC]/40 rounded-3xl border border-[#E6E0D4] border-dashed">
               <span className="text-3xl">📭</span>
               <p className="text-xs font-bold text-[#8D7B68] mt-3">لا توجد كتب مطابقة لخيارات التصفية الحالية.</p>
@@ -725,8 +919,61 @@ export default function LibraryShelf({
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-y-16 gap-x-6 md:gap-x-8">
+              
+              {/* Show Return/Back Book Card inside filtered category views */}
+              {activeTab !== "all" && searchQuery.trim() === "" && (
+                <div className="flex flex-col group relative pb-10 animate-fade-in">
+                  <div className="relative aspect-[3/4] w-full z-10">
+                    <div 
+                      onClick={() => {
+                        setActiveTab("all");
+                        setSelectedTag("all");
+                      }}
+                      className="cursor-pointer absolute inset-0 rounded-r-xl rounded-l-md shadow-lg hover:shadow-2xl transition-all duration-300 transform preserve-3d overflow-hidden flex flex-col justify-between p-4 border-r border-[#ffffff30] z-10 origin-bottom -rotate-3 hover:rotate-0 hover:scale-105 hover:-translate-y-3 bg-gradient-to-br from-[#735F53] to-[#45372E] text-white border-2 border-[#FAF5EC]/20"
+                    >
+                      <div className="absolute inset-0 bg-[#4A3B32]/10 z-0"></div>
+                      <div className="absolute inset-2 border border-dashed border-white/20 rounded-md z-0 pointer-events-none"></div>
+                      <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-r from-black/55 to-transparent z-10"></div>
+                      
+                      <div className="relative z-10 flex-1 flex flex-col justify-between h-full">
+                        <div className="py-1 px-1.5 rounded-md text-center bg-white/20 text-[9px] font-extrabold tracking-wider text-amber-100 truncate">
+                          رفوف الأقسام الرئيسية
+                        </div>
+                        
+                        <div className="my-auto text-center py-2 px-1 flex flex-col items-center">
+                          <span className="text-3xl animate-bounce">↩</span>
+                          <p className="font-serif font-extrabold text-xs md:text-sm text-yellow-50 leading-snug mt-2">
+                            الرجوع للرف الرئيسي
+                          </p>
+                          <p className="text-[9px] text-amber-200/80 mt-1 leading-normal">
+                            تصفح باقي التصنيفات
+                          </p>
+                        </div>
+                        
+                        <div className="mx-auto mt-2 text-center">
+                          <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center bg-black/10 text-amber-300/60">
+                            <span className="text-[10px]">۞</span>
+                          </div>
+                        </div>
+                      </div>
+                    </div>
+                    
+                    {/* Wooden Shelf */}
+                    <div className="absolute bottom-[-14px] left-[-12px] right-[-12px] md:left-[-16px] md:right-[-16px] h-6 bg-gradient-to-b from-[#A05C3F] via-[#7B3F27] to-[#4A2010] rounded-sm shadow-[0_12px_18px_rgba(0,0,0,0.55),0_3px_5px_rgba(0,0,0,0.25)] z-0 border-b border-black/50">
+                      <div className="absolute top-0 left-0 right-0 h-[4px] bg-[#C18260] opacity-80 border-b border-black/25"></div>
+                    </div>
+                  </div>
+                  
+                  <div className="mt-8 text-right z-10 px-1">
+                    <h3 className="font-bold text-xs text-[#6D4C41]">رجوع للرف الرئيسي</h3>
+                    <p className="text-[10px] opacity-75">تصفح الرفوف والأقسام الأخرى</p>
+                  </div>
+                </div>
+              )}
+
               {sortedAndFilteredBooks.map((book, idx) => {
-                const colors = getTraditionalCoverColors(book.title, book.id);
+                const colors = getTraditionalCoverColors(book.title, book.id, book.category);
+                const isKidsBook = book.category === "children";
                 
                 // Determine leaning styles for books to make them look like cozy physical books
                 let leaningClass = "";
@@ -744,56 +991,82 @@ export default function LibraryShelf({
                 return (
                 <div 
                   key={book.id} 
-                  className="flex flex-col group relative pb-10"
+                  className={`flex flex-col group relative pb-10 ${isKidsBook ? "animate-fade-in" : ""}`}
                 >
                   {/* Container of book cover standing on top of the shelf */}
                   <div className="relative aspect-[3/4] w-full z-10">
                     {/* The stylized 3D realistic book spine & cover cover */}
                     <div 
                       onClick={() => onSelectBook(book)}
-                      className={`cursor-pointer absolute inset-0 rounded-r-lg rounded-l-md shadow-lg hover:shadow-2xl transition-all duration-300 transform preserve-3d overflow-hidden flex flex-col justify-between p-3.5 border-r border-[#ffffff30] z-10 ${leaningClass}`}
+                      className={`cursor-pointer absolute inset-0 rounded-r-lg rounded-l-md shadow-lg hover:shadow-2xl transition-all duration-300 transform preserve-3d overflow-hidden flex flex-col justify-between p-3.5 border-r border-[#ffffff30] z-10 ${leaningClass} ${
+                        isKidsBook ? "ring-2 ring-yellow-300/40 hover:ring-yellow-300/80 shadow-rose-300/25" : ""
+                      }`}
                     >
                       {/* The Cover gradient and background pattern */}
                       <div className={`absolute inset-0 ${colors.bg} z-0`}></div>
-                      {/* Ornamental Gold Motif Background */}
-                      <div className="absolute inset-2 border border-dashed border-white/20 rounded-md z-0 pointer-events-none"></div>
-                      <div className="absolute top-2 right-2 left-2 h-[1px] bg-gradient-to-r from-transparent via-white/30 to-transparent"></div>
+                      
+                      {/* Playful Stickers on kids book cover */}
+                      {isKidsBook && (
+                        <>
+                          <div className="absolute top-1 right-1 text-md animate-bounce z-20" style={{ animationDuration: "4s" }}>🎈</div>
+                          <div className="absolute bottom-1 left-1 text-md animate-bounce z-20" style={{ animationDuration: "6s", animationDelay: "1.5s" }}>⭐</div>
+                        </>
+                      )}
 
+                      {/* Ornamental Motif Background */}
+                      <div className={`absolute inset-2 border border-dashed rounded-md z-0 pointer-events-none ${
+                        isKidsBook ? "border-white/50" : "border-white/20"
+                      }`}></div>
+                      
+                      <div className="absolute top-2 right-2 left-2 h-[1px] bg-gradient-to-r from-transparent via-white/30 to-transparent"></div>
+ 
                       {/* Left Spine Thickness Shader for 3D Feel */}
                       <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-r from-black/50 to-transparent z-10"></div>
                       <div className="absolute left-[3px] top-0 bottom-0 w-[1px] bg-white/20 z-10"></div>
-
+ 
                       {/* Cover Content Overlay */}
                       <div className="relative z-10 flex-1 flex flex-col justify-between">
                         
                         {/* Top banner / Sudanese pattern */}
-                        <div className={`py-1 px-1.5 rounded-md text-center ${colors.banner} text-[9px] font-bold tracking-wider ${colors.text} truncate uppercase max-w-full`}>
-                          {book.isCustom ? (book.fileSize ? `ملف محلي • ${book.fileSize}` : "رابط سحابي") : "مخطوطة عريقة"}
+                        <div className={`py-1 px-1.5 rounded-md text-center ${colors.banner} text-[9px] font-extrabold tracking-wider ${colors.text} truncate uppercase max-w-full`}>
+                          {isKidsBook ? "🧸 حكاية الأذكياء" : (book.isCustom ? (book.fileSize ? `ملف محلي • ${book.fileSize}` : "رابط سحابي") : "مخطوطة عريقة")}
                         </div>
-
+ 
                         {/* Center Title */}
                         <div className="my-auto text-center py-2 px-1">
-                          <p className="font-serif font-extrabold text-xs md:text-sm text-amber-100 leading-snug tracking-wide line-clamp-3">
+                          <p className={`font-serif font-extrabold text-xs md:text-sm leading-snug tracking-wide line-clamp-3 ${
+                            isKidsBook ? "text-yellow-50 font-sans tracking-normal" : "text-amber-100"
+                          }`}>
                             {book.title}
                           </p>
-                          <p className="text-[10px] text-amber-200/80 mt-1.5 line-clamp-1 italic">
+                          <p className={`text-[10px] mt-1.5 line-clamp-1 italic ${
+                            isKidsBook ? "text-yellow-200/90 font-sans" : "text-amber-200/80"
+                          }`}>
                             {book.author}
                           </p>
                         </div>
-
+ 
                         {/* Decorative medallion badge at the bottom */}
-                        <div className="mx-auto mt-2 text-center">
-                          <div className={`w-7 h-7 rounded-full border ${colors.accent} flex items-center justify-center bg-black/10 text-amber-300/60`}>
-                            <span className="text-[9px] font-mono">۞</span>
+                        {isKidsBook ? (
+                          <div className="mx-auto mt-2 text-center">
+                            <div className="w-7 h-7 rounded-full border border-yellow-300 flex items-center justify-center bg-yellow-400/20 text-yellow-300 animate-pulse">
+                              <span className="text-xs">⭐</span>
+                            </div>
                           </div>
-                        </div>
-
+                        ) : (
+                          <div className="mx-auto mt-2 text-center">
+                            <div className={`w-7 h-7 rounded-full border ${colors.accent} flex items-center justify-center bg-black/10 text-amber-300/60`}>
+                              <span className="text-[9px] font-mono">۞</span>
+                            </div>
+                          </div>
+                        )}
+ 
                       </div>
-
+ 
                       {/* Book pages physical thickness edge shader (on the right) */}
                       <div className="absolute right-0 top-0 bottom-0 w-1 bg-gradient-to-l from-white/30 to-transparent z-10"></div>
                     </div>
-
+ 
                     {/* Continuous 3D heavy acacia wooden shelf running directly underneath the standing books */}
                     <div className="absolute bottom-[-14px] left-[-12px] right-[-12px] md:left-[-16px] md:right-[-16px] h-6 bg-gradient-to-b from-[#A05C3F] via-[#7B3F27] to-[#4A2010] rounded-sm shadow-[0_12px_18px_rgba(0,0,0,0.55),0_3px_5px_rgba(0,0,0,0.25)] z-0 border-b border-black/50">
                       {/* 3D Top bevel surface of the shelf */}
@@ -807,16 +1080,23 @@ export default function LibraryShelf({
                       <div className="absolute top-6 left-2 right-2 h-3 bg-black/45 blur-[3px] rounded-full pointer-events-none"></div>
                     </div>
                   </div>
-
+ 
                   {/* Book Metadata & Deletion placed elegantly BELOW the wooden shelf */}
                   <div className="mt-8 text-right z-10 px-1">
-                    <h3 className="font-bold text-xs line-clamp-1 text-[#4A3B32]">
+                    <h3 className={`font-bold text-xs line-clamp-1 ${isKidsBook ? "text-rose-600 font-extrabold" : "text-[#4A3B32]"}`}>
                       {book.title}
                     </h3>
                     <p className="text-[10px] opacity-75 line-clamp-1 mt-0.5">
                       {book.author}
                     </p>
                     
+                    {/* Display Kids Encouragement Badges */}
+                    {isKidsBook && (
+                      <span className="inline-block mt-1 text-[9px] bg-rose-500/10 text-rose-600 border border-rose-500/15 px-2 py-0.5 rounded-full font-bold shadow-sm">
+                        🧸 البطل الذكي
+                      </span>
+                    )}
+
                     {/* Display tags if present */}
                     {book.tags && book.tags.length > 0 && (
                       <div className="flex flex-wrap gap-1 justify-end mt-1.5">
