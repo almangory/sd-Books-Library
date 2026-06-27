@@ -406,12 +406,7 @@ export default function App() {
                 onClick={() => {
                   setIsExiting(true);
                   setShowExitConfirm(false);
-                  alert("تم الخروج الآمن.");
-                  // Exit by moving out of the guarded history states
-                  window.history.go(-2);
-                  setTimeout(() => {
-                    window.location.href = "about:blank";
-                  }, 150);
+                  window.location.href = "https://sudan-interactive-curricula.vercel.app/";
                 }}
                 className="flex-1 py-2.5 rounded-xl bg-[#9E4233] hover:bg-[#853225] text-xs font-bold text-white"
               >
