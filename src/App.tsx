@@ -4,6 +4,7 @@ import LibraryShelf from "./components/LibraryShelf";
 import ThreeDFlipbook from "./components/ThreeDFlipbook";
 import SupabaseRequirements from "./components/SupabaseRequirements";
 import { LogOut, X, AlertCircle } from "lucide-react";
+import { getTranslation } from "./utils/translations";
 
 // Curated default books representing traditional Sudanese literature, history, and education.
 const DEFAULT_BOOKS: Book[] = [];
@@ -121,7 +122,11 @@ export default function App() {
     const saved = localStorage.getItem("flipbook_settings");
     if (saved) {
       try {
-        return JSON.parse(saved);
+        const parsed = JSON.parse(saved);
+        if (!parsed.language) {
+          parsed.language = "ar";
+        }
+        return parsed;
       } catch (e) {
         // Fallback below
       }
@@ -130,7 +135,8 @@ export default function App() {
       darkMode: false,
       sepiaMode: true,
       readingMode: false,
-      zoom: 100
+      zoom: 100,
+      language: "ar"
     };
   });
 
@@ -138,6 +144,48 @@ export default function App() {
   useEffect(() => {
     localStorage.setItem("flipbook_settings", JSON.stringify(settings));
   }, [settings]);
+
+  // Screen Wake Lock to prevent screen dimming/sleeping automatically on mobiles & tablets
+  useEffect(() => {
+    let wakeLock: any = null;
+
+    const requestWakeLock = async () => {
+      if (typeof window === "undefined" || !("wakeLock" in navigator)) {
+        console.log("Wake Lock API is not supported by this browser.");
+        return;
+      }
+      try {
+        wakeLock = await (navigator as any).wakeLock.request("screen");
+        console.log("Screen Wake Lock activated successfully!");
+      } catch (err: any) {
+        console.warn(`Screen Wake Lock failed: ${err.name}, ${err.message}`);
+      }
+    };
+
+    // Request wake lock initially
+    requestWakeLock();
+
+    // Re-request when page becomes visible again (e.g., user returns to tab)
+    const handleVisibilityChange = async () => {
+      if (document.visibilityState === "visible") {
+        await requestWakeLock();
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      if (wakeLock) {
+        try {
+          wakeLock.release();
+          console.log("Screen Wake Lock released.");
+        } catch (e) {
+          console.warn("Error releasing wake lock:", e);
+        }
+      }
+    };
+  }, []);
 
   // Protect content
   useEffect(() => {
@@ -327,10 +375,48 @@ export default function App() {
     window.history.pushState({ view: "reader", bookId: book.id }, "");
   };
 
+  // Handle shared book URL on initial load
+  useEffect(() => {
+    if (typeof window === "undefined" || books.length === 0 || selectedBook) return;
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    const bId = urlParams.get("bookId") || urlParams.get("book");
+    if (bId) {
+      const foundBook = books.find(b => b.id === bId);
+      if (foundBook) {
+        const pageParam = urlParams.get("page");
+        if (pageParam) {
+          localStorage.setItem(`progress_${foundBook.id}`, pageParam);
+        }
+        
+        // Open the book
+        handleSelectBook(foundBook);
+        
+        // Clean URL to keep it pristine and avoid re-opening on manual refresh
+        try {
+          const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+          window.history.replaceState({ view: "reader", bookId: foundBook.id }, "", cleanUrl);
+        } catch (e) {
+          console.warn("Failed to clean shared URL parameters:", e);
+        }
+      }
+    }
+  }, [books, selectedBook]);
+
+  const currentLang = settings.language || "ar";
+  const t = (key: Parameters<typeof getTranslation>[0]) => getTranslation(key, currentLang);
+
   return (
-    <div className={`min-h-screen transition-colors duration-500 ${
-      settings.darkMode ? "bg-[#1E1916] text-[#EADDC9]" : "bg-[#FDFBF7] text-[#4A3B32]"
-    }`}>
+    <div 
+      dir={currentLang === "en" ? "ltr" : "rtl"}
+      className={`min-h-screen transition-all duration-500 ease-in-out ${
+        settings.darkMode 
+          ? "bg-[#1E1916] text-[#EADDC9]" 
+          : settings.sepiaMode 
+            ? "bg-[#F5EEDC] text-[#5C4033]" 
+            : "bg-[#FDFBF7] text-[#4A3B32]"
+      }`}
+    >
       
       {!settings.readingMode && view === "shelf" && (
         <div className="bg-[#4A3B32] text-[#FAF6EE] text-xs px-4 py-2 flex justify-between items-center shadow-sm">
@@ -339,11 +425,11 @@ export default function App() {
             className="flex items-center gap-1 hover:text-red-300 transition-all font-semibold"
           >
             <LogOut className="w-3.5 h-3.5" />
-            <span> الرجوع للمنصة</span>
+            <span> {t("backToPlatform")}</span>
           </button>
           
           <div className="flex items-center gap-1.5 opacity-85 font-mono">
-            <span>التوقيت المحلي: {new Date().toLocaleDateString("ar-EG")}</span>
+            <span>{t("localTime")} {new Date().toLocaleDateString(currentLang === "en" ? "en-US" : "ar-EG")}</span>
             <span className="w-1.5 h-1.5 rounded-full bg-green-500 animate-pulse"></span>
           </div>
         </div>
@@ -365,6 +451,8 @@ export default function App() {
           onAdminLogout={handleAdminLogout}
           adminPassword={adminPassword}
           isOnline={isOnline}
+          language={currentLang}
+          onChangeLanguage={(lang) => setSettings(prev => ({ ...prev, language: lang }))}
         />
       )}
 
@@ -388,21 +476,30 @@ export default function App() {
       )}
 
       {showExitConfirm && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm">
-          <div className="w-full max-w-sm p-6 rounded-2xl bg-[#FDFBF7] border border-[#E6E0D4] shadow-2xl text-right">
-            <div className="flex items-center gap-3 justify-end text-amber-700 mb-3">
-              <span className="font-serif font-bold text-md">هل تود مغادرة مكتبتك الرقمية؟</span>
-              <AlertCircle className="w-6 h-6 text-[#9E4233]" />
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-sm" dir={currentLang === "en" ? "ltr" : "rtl"}>
+          <div className={`w-full max-w-sm p-6 rounded-2xl bg-[#FDFBF7] border border-[#E6E0D4] shadow-2xl ${currentLang === "en" ? "text-left" : "text-right"}`}>
+            <div className={`flex items-center gap-3 text-amber-700 mb-3 ${currentLang === "en" ? "justify-start" : "justify-end"}`}>
+              {currentLang === "en" ? (
+                <>
+                  <AlertCircle className="w-6 h-6 text-[#9E4233]" />
+                  <span className="font-serif font-bold text-md">{t("exitConfirmTitle")}</span>
+                </>
+              ) : (
+                <>
+                  <span className="font-serif font-bold text-md">{t("exitConfirmTitle")}</span>
+                  <AlertCircle className="w-6 h-6 text-[#9E4233]" />
+                </>
+              )}
             </div>
             <p className="text-xs text-[#6D4C41] leading-relaxed mb-6">
-              بمغادرتك التطبيق، ستفقد إمكانية مواصلة القراءة السريعة لصفحتك المفتوحة حالياً.
+              {t("exitConfirmDesc")}
             </p>
             <div className="flex gap-3">
               <button
                 onClick={() => setShowExitConfirm(false)}
                 className="flex-1 py-2.5 rounded-xl border border-neutral-300 hover:bg-neutral-100 text-xs font-bold text-neutral-600"
               >
-                تراجع
+                {t("cancel")}
               </button>
               <button
                 onClick={() => {
@@ -412,7 +509,7 @@ export default function App() {
                 }}
                 className="flex-1 py-2.5 rounded-xl bg-[#9E4233] hover:bg-[#853225] text-xs font-bold text-white"
               >
-                مغادرة
+                {t("leave")}
               </button>
             </div>
           </div>

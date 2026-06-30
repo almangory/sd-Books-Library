@@ -26,10 +26,12 @@ import {
   Headphones,
   Loader2,
   Settings,
-  Globe
+  Globe,
+  Share2
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import * as pdfjsLib from "pdfjs-dist";
+import { getTranslation } from "../utils/translations";
 // @ts-ignore
 import { getGoogleDriveDirectLink } from "../utils/driveParser";
 // @ts-ignore
@@ -196,10 +198,14 @@ export default function ThreeDFlipbook({
   settings, 
   setSettings 
 }: ThreeDFlipbookProps) {
+  const currentLang = settings.language || "ar";
+  const t = (key: Parameters<typeof getTranslation>[0]) => getTranslation(key, currentLang);
+
   // Navigation & Page State
   const [numPages, setNumPages] = useState<number>(0);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [isBookLoaded, setIsBookLoaded] = useState<boolean>(false);
+  const [isProgressRestored, setIsProgressRestored] = useState<boolean>(false);
   const [loadingProgress, setLoadingProgress] = useState<number>(0);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [isFallbackGenerated, setIsFallbackGenerated] = useState<boolean>(false);
@@ -223,6 +229,32 @@ export default function ThreeDFlipbook({
       }
     };
   }, []);
+
+  // Refs and effect to auto-save page on unmount/close
+  const currentPageRef = useRef(currentPage);
+  const isBookLoadedRef = useRef(isBookLoaded);
+  const isProgressRestoredRef = useRef(isProgressRestored);
+
+  useEffect(() => {
+    currentPageRef.current = currentPage;
+  }, [currentPage]);
+
+  useEffect(() => {
+    isBookLoadedRef.current = isBookLoaded;
+  }, [isBookLoaded]);
+
+  useEffect(() => {
+    isProgressRestoredRef.current = isProgressRestored;
+  }, [isProgressRestored]);
+
+  useEffect(() => {
+    return () => {
+      if (isBookLoadedRef.current && isProgressRestoredRef.current && currentPageRef.current > 0) {
+        localStorage.setItem(`progress_${book.id}`, currentPageRef.current.toString());
+        localStorage.setItem("flipbook_last_opened_id", book.id);
+      }
+    };
+  }, [book.id]);
   
   // Audio state
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
@@ -239,6 +271,64 @@ export default function ThreeDFlipbook({
       document.removeEventListener("fullscreenchange", handleFullscreenChange);
     };
   }, []);
+
+  // Share current book and page state & handler
+  const [shareSuccess, setShareSuccess] = useState<boolean>(false);
+
+  const handleShareCurrentPage = async () => {
+    const shareUrl = `${window.location.origin}${window.location.pathname}?bookId=${book.id}&page=${currentPage}`;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: book.title,
+          text: `اقرأ الصفحة ${currentPage} من كتاب "${book.title}" للكاتب ${book.author} عبر تطبيق مكتبتي الرقمية السودانية التفاعلية.`,
+          url: shareUrl
+        });
+        return;
+      } catch (err) {
+        console.warn("Navigator share failed, falling back to clipboard: ", err);
+      }
+    }
+    
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setShareSuccess(true);
+      setTimeout(() => setShareSuccess(false), 2500);
+    } catch (clipboardErr) {
+      console.error("Failed to copy link: ", clipboardErr);
+      const tempInput = document.createElement("input");
+      tempInput.value = shareUrl;
+      document.body.appendChild(tempInput);
+      tempInput.select();
+      document.execCommand("copy");
+      document.body.removeChild(tempInput);
+      setShareSuccess(true);
+      setTimeout(() => setShareSuccess(false), 2500);
+    }
+  };
+
+  const imageFilterStyle = {
+    transition: "filter 0.5s ease-in-out, opacity 0.3s ease-in-out",
+    filter: settings.darkMode 
+      ? "invert(0.92) hue-rotate(180deg) brightness(0.95) contrast(0.9)" 
+      : settings.sepiaMode 
+        ? "sepia(0.55) contrast(0.98) brightness(0.96)" 
+        : "none"
+  };
+
+  const getButtonClass = (isActive: boolean = false) => {
+    if (isActive) {
+      return "bg-[#5A5A40] text-white p-2 rounded-lg transition-all duration-300";
+    }
+    return `p-2 rounded-lg transition-all duration-300 ${
+      settings.darkMode 
+        ? "text-[#FAF6EE] hover:bg-[#3A3029]" 
+        : settings.sepiaMode 
+          ? "text-[#5C4033] hover:bg-[#DFCDB0]" 
+          : "text-[#4A3B32] hover:bg-[#E6D5B8]"
+    }`;
+  };
 
   const toggleFullscreen = () => {
     try {
@@ -823,6 +913,7 @@ export default function ThreeDFlipbook({
 
     const loadPdf = async () => {
       setIsBookLoaded(false);
+      setIsProgressRestored(false);
       setLoadError(null);
       setLoadingProgress(10);
       setRenderedPages({});
@@ -977,6 +1068,7 @@ export default function ThreeDFlipbook({
         } else {
           setCurrentPage(1);
         }
+        setIsProgressRestored(true);
       } catch (error: any) {
         console.warn("Primary PDF loading failed, generating interactive local copy: ", error);
         if (!active) return;
@@ -1026,6 +1118,7 @@ export default function ThreeDFlipbook({
           } else {
             setCurrentPage(1);
           }
+          setIsProgressRestored(true);
         } catch (fallbackError: any) {
           console.error("Fallback PDF generation failed too: ", fallbackError);
           if (active) {
@@ -1062,10 +1155,11 @@ export default function ThreeDFlipbook({
 
   // Handle local state persistence for reading progress
   useEffect(() => {
-    if (isBookLoaded && currentPage) {
+    if (isBookLoaded && isProgressRestored && currentPage) {
       localStorage.setItem(`progress_${book.id}`, currentPage.toString());
+      localStorage.setItem("flipbook_last_opened_id", book.id);
     }
-  }, [currentPage, book.id, isBookLoaded]);
+  }, [currentPage, book.id, isBookLoaded, isProgressRestored]);
 
   // Generate Table of Contents (فهرس الكتاب) list
   const getChapterList = () => {
@@ -1429,18 +1523,22 @@ export default function ThreeDFlipbook({
   const { left: doubleLeftPage, right: doubleRightPage } = getDoublePagePair();
 
   return (
-    <div className={`flex flex-col min-h-screen transition-colors duration-500 ${
+    <div className={`flex flex-col min-h-screen transition-all duration-500 ease-in-out ${
       settings.darkMode 
         ? "bg-[#1E1916] text-[#EADDC9]" 
-        : "bg-[#FDFBF7] text-[#4A3B32]"
+        : settings.sepiaMode
+          ? "bg-[#F5EEDC] text-[#5C4033]"
+          : "bg-[#FDFBF7] text-[#4A3B32]"
     } selection:bg-[#D4A373] selection:text-white`}>
       
       {/* 1. Header Toolbar (Hidden in absolute Reading Mode) */}
       {!settings.readingMode && (
-        <header className={`border-b px-4 lg:px-8 py-3 transition-colors duration-300 ${
+        <header className={`border-b px-4 lg:px-8 py-3 transition-all duration-500 ease-in-out ${
           settings.darkMode 
             ? "border-[#3A3029] bg-[#27211D]" 
-            : "border-[#E6D5B8] bg-[#FAF6EE]"
+            : settings.sepiaMode
+              ? "border-[#DFCDB0] bg-[#EADDC9]"
+              : "border-[#E6D5B8] bg-[#FAF6EE]"
         }`}>
           <div className="max-w-7xl mx-auto flex flex-col sm:flex-row justify-between items-center gap-3">
             
@@ -1449,10 +1547,12 @@ export default function ThreeDFlipbook({
               <button 
                 id="back_to_library_btn"
                 onClick={onBackToLibrary}
-                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-sm font-medium transition-all ${
+                className={`flex items-center gap-2 px-3.5 py-1.5 rounded-xl text-sm font-medium transition-all duration-300 ${
                   settings.darkMode 
                     ? "bg-[#3A3029] text-[#FAF6EE] hover:bg-[#4E4138]" 
-                    : "bg-[#E6D5B8] text-[#4A3B32] hover:bg-[#DFCDB0]"
+                    : settings.sepiaMode
+                      ? "bg-[#E6D5B8] text-[#5C4033] hover:bg-[#DFCDB0]"
+                      : "bg-[#E6D5B8] text-[#4A3B32] hover:bg-[#DFCDB0]"
                 }`}
               >
                 <ChevronRight className="w-4 h-4" />
@@ -1463,7 +1563,7 @@ export default function ThreeDFlipbook({
                 <div className="flex items-center gap-2 justify-end">
                   {isFallbackGenerated && (
                     <span className="px-2 py-0.5 rounded-full bg-amber-100 dark:bg-amber-950/40 text-amber-800 dark:text-amber-300 text-[10px] font-bold border border-amber-200 dark:border-amber-900/50 animate-pulse">
-                      نسخة تفاعلية محاورة
+                      {currentLang === "en" ? "Interactive Copy" : "نسخة تفاعلية محاورة"}
                     </span>
                   )}
                   <span className={`px-2 py-0.5 rounded-full text-[10px] font-bold border ${
@@ -1471,14 +1571,16 @@ export default function ThreeDFlipbook({
                       ? "bg-emerald-100 dark:bg-emerald-950/40 text-emerald-800 dark:text-emerald-300 border-emerald-200 dark:border-emerald-900/50"
                       : "bg-[#5A5A40]/10 text-[#5A5A40] dark:text-[#CBB59C] border-[#5A5A40]/20"
                   }`}>
-                    {pdfOrientation === "landscape" ? "مخطوطة أفقية" : "مخطوطة رأسية"}
+                    {pdfOrientation === "landscape" 
+                      ? (currentLang === "en" ? "Horizontal Layout" : "مخطوطة أفقية") 
+                      : (currentLang === "en" ? "Vertical Layout" : "مخطوطة رأسية")}
                   </span>
                   <h1 className="font-bold text-base md:text-lg tracking-tight line-clamp-1">
                     {book.title}
                   </h1>
                 </div>
-                <p className={`text-xs ${settings.darkMode ? "text-[#CBB59C]" : "text-[#8D7B68]"}`}>
-                  الكاتب: {book.author}
+                <p className={`text-xs transition-colors duration-500 ${settings.darkMode ? "text-[#CBB59C]" : settings.sepiaMode ? "text-[#7D6B58]" : "text-[#8D7B68]"}`}>
+                  {t("authorLabel")}: {book.author}
                 </p>
               </div>
             </div>
@@ -1489,58 +1591,100 @@ export default function ThreeDFlipbook({
               {/* RTL / LTR Toggle */}
               <button
                 onClick={() => setIsRTL(!isRTL)}
-                className={`p-2 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
-                  settings.darkMode ? "hover:bg-[#3A3029]" : "hover:bg-[#E6D5B8]"
-                }`}
-                title="تغيير اتجاه تقليب الصفحات"
+                className={`text-xs font-semibold flex items-center gap-1 ${getButtonClass()}`}
+                title={t("rtlLayout")}
               >
                 <Compass className="w-4 h-4" />
-                <span>{isRTL ? "تقليب عربي (RTL)" : "تقليب إنجليزي (LTR)"}</span>
+                <span>{isRTL ? t("rtlLayoutOn") : t("rtlLayoutOff")}</span>
               </button>
 
               {/* Page Layout Mode Toggle */}
               <button
                 onClick={() => setIsDoublePage(!isDoublePage)}
-                className={`p-2 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all ${
-                  settings.darkMode ? "hover:bg-[#3A3029]" : "hover:bg-[#E6D5B8]"
-                }`}
-                title="تغيير طريقة عرض الصفحات (صفحة واحدة / صفحتين)"
+                className={`text-xs font-semibold flex items-center gap-1 ${getButtonClass()}`}
+                title={t("pageLayoutMode")}
               >
                 {isDoublePage ? <FileText className="w-4 h-4 text-[#5A5A40]" /> : <BookOpen className="w-4 h-4 text-[#5A5A40]" />}
-                <span>{isDoublePage ? "عرض صفحة واحدة" : "عرض صفحتين"}</span>
+                <span>{isDoublePage ? t("singlePage") : t("doublePage")}</span>
               </button>
 
               {/* Sound FX Toggle */}
               <button
                 onClick={() => setSoundEnabled(!soundEnabled)}
-                className={`p-2 rounded-lg transition-all ${
-                  settings.darkMode ? "hover:bg-[#3A3029]" : "hover:bg-[#E6E0D4]"
-                }`}
-                title={soundEnabled ? "كتم صوت تقليب الورق" : "تشغيل صوت تقليب الورق"}
+                className={getButtonClass()}
+                title={soundEnabled ? t("soundFxOff") : t("soundFxOn")}
               >
                 {soundEnabled ? <Volume2 className="w-4.5 h-4.5 text-[#5A5A40]" /> : <VolumeX className="w-4.5 h-4.5 opacity-50" />}
               </button>
 
-              {/* Dark mode toggle */}
-              <button
-                onClick={() => setSettings(prev => ({ ...prev, darkMode: !prev.darkMode }))}
-                className={`p-2 rounded-lg transition-all ${
-                  settings.darkMode ? "bg-[#3A3029] text-[#F3EFE0]" : "bg-[#E6E0D4] text-[#4A3B32]"
-                }`}
-                title="تغيير مظهر الإضاءة"
-              >
-                {settings.darkMode ? <Sun className="w-4.5 h-4.5" /> : <Moon className="w-4.5 h-4.5" />}
-              </button>
+              {/* Reading Theme Modes Selector (Light, Sepia, Dark) */}
+              <div className={`flex items-center p-0.5 rounded-xl border transition-all duration-500 ease-in-out ${
+                settings.darkMode 
+                  ? "bg-[#27211D] border-[#3D322A]" 
+                  : settings.sepiaMode 
+                    ? "bg-[#EADDC9] border-[#DFCDB0]" 
+                    : "bg-[#E6D5B8] border-[#DED6C7]"
+              }`}>
+                {/* Light Button */}
+                <button
+                  onClick={() => setSettings(prev => ({ ...prev, darkMode: false, sepiaMode: false }))}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all duration-300 ${
+                    !settings.darkMode && !settings.sepiaMode
+                      ? "bg-[#FAF6EE] text-[#4A3B32] shadow-sm scale-105"
+                      : "text-neutral-500 hover:text-neutral-700"
+                  }`}
+                  title={currentLang === "en" ? "Normal Light (Light)" : "الإضاءة العادية (فاتح)"}
+                >
+                  <Sun className="w-3.5 h-3.5 text-amber-500" />
+                  <span className="hidden lg:inline">{currentLang === "en" ? "Light" : "فاتح"}</span>
+                </button>
+
+                {/* Sepia Button */}
+                <button
+                  onClick={() => setSettings(prev => ({ ...prev, darkMode: false, sepiaMode: true }))}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all duration-300 ${
+                    !settings.darkMode && settings.sepiaMode
+                      ? "bg-[#FAF6EE] text-[#5C4033] shadow-sm scale-105"
+                      : "text-neutral-500 hover:text-neutral-700"
+                  }`}
+                  title={currentLang === "en" ? "Warm Sudan Ochre (Sepia)" : "الإضاءة الدافئة (سيبيا)"}
+                >
+                  <span className="w-3.5 h-3.5 rounded-full bg-[#E6D5B8] border border-amber-600/30"></span>
+                  <span className="hidden lg:inline">{currentLang === "en" ? "Sepia" : "دافئ"}</span>
+                </button>
+
+                {/* Dark Button */}
+                <button
+                  onClick={() => setSettings(prev => ({ ...prev, darkMode: true, sepiaMode: false }))}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-semibold flex items-center gap-1 transition-all duration-300 ${
+                    settings.darkMode
+                      ? "bg-[#3A3029] text-[#FAF6EE] shadow-sm scale-105"
+                      : "text-neutral-500 hover:text-neutral-700"
+                  }`}
+                  title={currentLang === "en" ? "Night Mode (Dark)" : "الإضاءة الليلية (داكن)"}
+                >
+                  <Moon className="w-3.5 h-3.5 text-[#CBB59C]" />
+                  <span className="hidden lg:inline">{currentLang === "en" ? "Dark" : "داكن"}</span>
+                </button>
+              </div>
 
               {/* Fullscreen toggle */}
               <button
                 onClick={toggleFullscreen}
-                className={`p-2 rounded-lg transition-all ${
-                  isFullscreen ? "bg-[#5A5A40] text-white" : settings.darkMode ? "bg-[#3A3029] hover:bg-[#4E4138] text-[#F3EFE0]" : "bg-[#E6E0D4] hover:bg-[#DED6C7] text-[#4A3B32]"
-                }`}
-                title="ملء الشاشة"
+                className={isFullscreen ? "bg-[#5A5A40] text-white p-2 rounded-lg transition-all duration-300" : getButtonClass()}
+                title={isFullscreen ? t("exitFullscreenBtn") : t("fullscreenBtn")}
               >
                 {isFullscreen ? <Minimize className="w-4.5 h-4.5" /> : <Maximize className="w-4.5 h-4.5" />}
+              </button>
+
+              {/* Share Book/Page button */}
+              <button
+                onClick={handleShareCurrentPage}
+                className={shareSuccess ? "bg-emerald-600 text-white p-2 rounded-lg transition-all duration-300 text-xs font-semibold flex items-center gap-1" : `text-xs font-semibold flex items-center gap-1 ${getButtonClass()}`}
+                title={t("sharePage")}
+              >
+                <Share2 className="w-4 h-4" />
+                <span>{shareSuccess ? (currentLang === "en" ? "Copied!" : "تم النسخ!") : (currentLang === "en" ? "Share" : "مشاركة")}</span>
               </button>
 
               {/* Zoom buttons */}
@@ -1548,8 +1692,8 @@ export default function ThreeDFlipbook({
                 <button
                   onClick={handleZoomOut}
                   disabled={settings.zoom <= 100}
-                  className={`p-1.5 transition-all ${
-                    settings.darkMode ? "hover:bg-[#3A3029]" : "hover:bg-[#E6E0D4]"
+                  className={`p-1.5 transition-all duration-300 ${
+                    settings.darkMode ? "hover:bg-[#3A3029]" : settings.sepiaMode ? "hover:bg-[#DFCDB0]" : "hover:bg-[#E6E0D4]"
                   } disabled:opacity-30`}
                 >
                   <ZoomOut className="w-4 h-4" />
@@ -1560,8 +1704,8 @@ export default function ThreeDFlipbook({
                 <button
                   onClick={handleZoomIn}
                   disabled={settings.zoom >= 200}
-                  className={`p-1.5 transition-all ${
-                    settings.darkMode ? "hover:bg-[#3A3029]" : "hover:bg-[#E6E0D4]"
+                  className={`p-1.5 transition-all duration-300 ${
+                    settings.darkMode ? "hover:bg-[#3A3029]" : settings.sepiaMode ? "hover:bg-[#DFCDB0]" : "hover:bg-[#E6E0D4]"
                   } disabled:opacity-30`}
                 >
                   <ZoomIn className="w-4 h-4" />
@@ -1573,12 +1717,12 @@ export default function ThreeDFlipbook({
               {/* Bookmark Toggle (Adds/removes bookmark for current page) */}
               <button
                 onClick={toggleBookmark}
-                className={`p-2 rounded-lg transition-all ${
+                className={`p-2 rounded-lg transition-all duration-300 ${
                   bookmarks.some(b => b.page === currentPage)
                     ? "bg-[#9E4233] text-white animate-pulse"
-                    : settings.darkMode ? "hover:bg-[#3A3029]" : "hover:bg-[#E6E0D4]"
+                    : settings.darkMode ? "hover:bg-[#3A3029] text-[#FAF6EE]" : settings.sepiaMode ? "hover:bg-[#DFCDB0] text-[#5C4033]" : "hover:bg-[#E6E0D4] text-[#4A3B32]"
                 }`}
-                title="تثبيت/إزالة علامة مرجعية للصفحة الحالية"
+                title={t("bookmarkBtn")}
               >
                 <BookmarkIcon className="w-4.5 h-4.5" />
               </button>
@@ -1596,12 +1740,12 @@ export default function ThreeDFlipbook({
                 className={`p-2 rounded-lg transition-all flex items-center gap-1.5 ${
                   showSidebar && sidebarTab === "index"
                     ? "bg-[#5A5A40] text-white"
-                    : settings.darkMode ? "hover:bg-[#3A3029]" : "hover:bg-[#E6E0D4]"
+                    : settings.darkMode ? "hover:bg-[#3A3029] text-[#FAF6EE]" : settings.sepiaMode ? "hover:bg-[#DFCDB0] text-[#5C4033]" : "hover:bg-[#E6E0D4] text-[#4A3B32]"
                 }`}
-                title="فهرس ومحتويات الكتاب"
+                title={t("indexTab")}
               >
                 <BookOpen className="w-4.5 h-4.5 text-amber-500" />
-                <span className="text-xs hidden md:inline">الفهرس</span>
+                <span className="text-xs hidden md:inline">{currentLang === "en" ? "Index" : "الفهرس"}</span>
               </button>
 
               {/* Bookmarks List Sidebar Toggle */}
@@ -1617,12 +1761,12 @@ export default function ThreeDFlipbook({
                 className={`p-2 rounded-lg transition-all flex items-center gap-1.5 ${
                   showSidebar && sidebarTab === "bookmarks"
                     ? "bg-[#5A5A40] text-white"
-                    : settings.darkMode ? "hover:bg-[#3A3029]" : "hover:bg-[#E6E0D4]"
+                    : settings.darkMode ? "hover:bg-[#3A3029] text-[#FAF6EE]" : settings.sepiaMode ? "hover:bg-[#DFCDB0] text-[#5C4033]" : "hover:bg-[#E6E0D4] text-[#4A3B32]"
                 }`}
-                title="العلامات المرجعية المحفوظة"
+                title={t("bookmarksTab")}
               >
                 <Compass className="w-4.5 h-4.5 text-emerald-500" />
-                <span className="text-xs hidden md:inline">العلامات المرجعية</span>
+                <span className="text-xs hidden md:inline">{currentLang === "en" ? "Bookmarks" : "العلامات المرجعية"}</span>
               </button>
 
               {/* Notes Sidebar Toggle */}
@@ -1638,12 +1782,12 @@ export default function ThreeDFlipbook({
                 className={`p-2 rounded-lg transition-all flex items-center gap-1.5 ${
                   showSidebar && sidebarTab === "notes"
                     ? "bg-[#4A3B32] text-white dark:bg-[#5A5A40]"
-                    : settings.darkMode ? "hover:bg-[#3A3029]" : "hover:bg-[#E6E0D4]"
+                    : settings.darkMode ? "hover:bg-[#3A3029] text-[#FAF6EE]" : settings.sepiaMode ? "hover:bg-[#DFCDB0] text-[#5C4033]" : "hover:bg-[#E6E0D4] text-[#4A3B32]"
                 }`}
-                title="ملاحظات الكتاب وهوامشه"
+                title={t("notesTab")}
               >
                 <FileText className="w-4.5 h-4.5 text-sky-500" />
-                <span className="text-xs hidden md:inline">الهوامش</span>
+                <span className="text-xs hidden md:inline">{currentLang === "en" ? "Margins" : "الهوامش"}</span>
               </button>
             </div>
 
@@ -1685,10 +1829,12 @@ export default function ThreeDFlipbook({
               setSettings(prev => ({ ...prev, readingMode: false }));
               setShowReadingHud(false);
             }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full shadow-xl text-xs font-semibold backdrop-blur-md transition-all ${
+            className={`flex items-center gap-2 px-4 py-2 rounded-full shadow-xl text-xs font-semibold backdrop-blur-md transition-all duration-300 ${
               settings.darkMode 
                 ? "bg-[#27211D]/95 text-[#FAF6EE] hover:bg-[#3A3029] border border-[#3A3029]" 
-                : "bg-white/95 text-[#4A3B32] border border-[#E6E0D4] hover:bg-[#FDFBF7]"
+                : settings.sepiaMode
+                  ? "bg-[#FAF6EE]/95 text-[#5C4033] border border-[#DFCDB0] hover:bg-[#FAF0D9]"
+                  : "bg-white/95 text-[#4A3B32] border border-[#E6E0D4] hover:bg-[#FDFBF7]"
             }`}
           >
             <Eye className="w-4 h-4 text-[#5A5A40]" />
@@ -1697,10 +1843,12 @@ export default function ThreeDFlipbook({
           
           <button
             onClick={onBackToLibrary}
-            className={`p-2.5 rounded-full shadow-xl backdrop-blur-md transition-all ${
+            className={`p-2.5 rounded-full shadow-xl backdrop-blur-md transition-all duration-300 ${
               settings.darkMode 
                 ? "bg-[#27211D]/95 text-white hover:bg-[#3A3029] border border-[#3A3029]" 
-                : "bg-white/95 text-[#4A3B32] border border-[#E6E0D4] hover:bg-[#FDFBF7]"
+                : settings.sepiaMode
+                  ? "bg-[#FAF6EE]/95 text-[#5C4033] border border-[#DFCDB0] hover:bg-[#FAF0D9]"
+                  : "bg-white/95 text-[#4A3B32] border border-[#E6E0D4] hover:bg-[#FDFBF7]"
             }`}
             title="رجوع للمكتبة"
           >
@@ -1714,10 +1862,12 @@ export default function ThreeDFlipbook({
         
         {/* Left Side Menu - Bookmarks list and Info (Floating or side panel) */}
         {!settings.readingMode && (
-          <aside className={`w-80 hidden xl:flex flex-col border-l transition-all duration-300 overflow-y-auto ${
+          <aside className={`w-80 hidden xl:flex flex-col border-l transition-all duration-500 ease-in-out overflow-y-auto ${
             settings.darkMode 
               ? "border-[#3A3029] bg-[#27211D]/60" 
-              : "border-[#E6E0D4] bg-[#FAF6EE]/60"
+              : settings.sepiaMode
+                ? "border-[#DFCDB0] bg-[#EADDC9]/60"
+                : "border-[#E6E0D4] bg-[#FAF6EE]/60"
           }`}>
             <div className="p-5 border-b border-[#E6E0D4]/40 dark:border-[#3A3029]/40">
               <h2 className="font-bold text-sm tracking-widest text-[#5A5A40] uppercase mb-1">
@@ -1913,10 +2063,12 @@ export default function ThreeDFlipbook({
                           else handleNextPage();
                         }
                       }}
-                      className={`relative w-full h-full rounded-xl overflow-hidden shadow-2xl border-4 cursor-pointer transition-transform active:scale-[0.99] select-none ${
+                      className={`relative w-full h-full rounded-xl overflow-hidden shadow-2xl border-4 cursor-pointer transition-all duration-500 ease-in-out active:scale-[0.99] select-none ${
                         settings.darkMode 
                           ? "bg-[#2D2520] border-[#3D322A]" 
-                          : "bg-[#FFFDF9] border-[#EADDC9]"
+                          : settings.sepiaMode
+                            ? "bg-[#FAF2DF] border-[#DFCDB0]"
+                            : "bg-[#FFFDF9] border-[#EADDC9]"
                       }`}
                     >
                       {/* Leaf pattern watermark background */}
@@ -1928,6 +2080,7 @@ export default function ThreeDFlipbook({
                           alt={`الصفحة ${currentPage}`} 
                           className="w-full h-full object-contain pointer-events-none"
                           referrerPolicy="no-referrer"
+                          style={imageFilterStyle}
                         />
                       ) : (
                         <div className="w-full h-full flex flex-col items-center justify-center">
@@ -2007,10 +2160,12 @@ export default function ThreeDFlipbook({
                               if (isRTL) handleNextPage();
                               else handlePrevPage();
                             }}
-                            className={`w-1/2 h-full relative rounded-r-none rounded-l-2xl border-4 border-r-0 shadow-2xl flex flex-col justify-between overflow-hidden transition-all transform-gpu cursor-pointer active:brightness-95 ${
+                            className={`w-1/2 h-full relative rounded-r-none rounded-l-2xl border-4 border-r-0 shadow-2xl flex flex-col justify-between overflow-hidden transition-all duration-500 ease-in-out transform-gpu cursor-pointer active:brightness-95 ${
                               settings.darkMode 
                                 ? "bg-[#261F1A] border-[#3D322A]" 
-                                : "bg-[#FAF7EE] border-[#EADDC9]"
+                                : settings.sepiaMode
+                                  ? "bg-[#FAF2DF] border-[#DFCDB0]"
+                                  : "bg-[#FAF7EE] border-[#EADDC9]"
                             }`}
                             style={{
                               transformOrigin: "right center"
@@ -2038,6 +2193,7 @@ export default function ThreeDFlipbook({
                                   alt={`الصفحة ${doubleLeftPage}`} 
                                   className="w-full h-full object-contain pointer-events-none"
                                   referrerPolicy="no-referrer"
+                                  style={imageFilterStyle}
                                 />
                               ) : (
                                 <div className="w-full h-full flex flex-col items-center justify-center">
@@ -2066,10 +2222,12 @@ export default function ThreeDFlipbook({
                               if (isRTL) handlePrevPage();
                               else handleNextPage();
                             }}
-                            className={`w-1/2 h-full relative rounded-l-none rounded-r-2xl border-4 border-l-0 shadow-2xl flex flex-col justify-between overflow-hidden transition-all transform-gpu cursor-pointer active:brightness-95 ${
+                            className={`w-1/2 h-full relative rounded-l-none rounded-r-2xl border-4 border-l-0 shadow-2xl flex flex-col justify-between overflow-hidden transition-all duration-500 ease-in-out transform-gpu cursor-pointer active:brightness-95 ${
                               settings.darkMode 
                                 ? "bg-[#261F1A] border-[#3D322A]" 
-                                : "bg-[#FAF7EE] border-[#EADDC9]"
+                                : settings.sepiaMode
+                                  ? "bg-[#FAF2DF] border-[#DFCDB0]"
+                                  : "bg-[#FAF7EE] border-[#EADDC9]"
                             }`}
                           >
                             {/* Shadow on inner spine */}
@@ -2094,6 +2252,7 @@ export default function ThreeDFlipbook({
                                   alt={`الصفحة ${doubleRightPage}`} 
                                   className="w-full h-full object-contain pointer-events-none"
                                   referrerPolicy="no-referrer"
+                                  style={imageFilterStyle}
                                 />
                               ) : (
                                 <div className="w-full h-full flex flex-col items-center justify-center">
@@ -2176,10 +2335,12 @@ export default function ThreeDFlipbook({
                               >
                                 {/* Front of flipping sheet */}
                                 <div 
-                                  className={`absolute inset-0 w-full h-full overflow-hidden flex flex-col justify-between border-4 ${
+                                  className={`absolute inset-0 w-full h-full overflow-hidden flex flex-col justify-between border-4 transition-all duration-500 ease-in-out ${
                                     settings.darkMode 
                                       ? "bg-[#2B231D] border-[#3D322A]" 
-                                      : "bg-[#FDFBF7] border-[#EADDC9]"
+                                      : settings.sepiaMode
+                                        ? "bg-[#FAF2DF] border-[#DFCDB0]"
+                                        : "bg-[#FDFBF7] border-[#EADDC9]"
                                   }`}
                                   style={{
                                     backfaceVisibility: "hidden",
@@ -2198,6 +2359,7 @@ export default function ThreeDFlipbook({
                                       className="w-full h-full object-contain pointer-events-none"
                                       alt="تحميل"
                                       referrerPolicy="no-referrer"
+                                      style={imageFilterStyle}
                                     />
                                   ) : (
                                     <div className="w-full h-full flex items-center justify-center bg-transparent">
@@ -2208,10 +2370,12 @@ export default function ThreeDFlipbook({
 
                                 {/* Back of flipping sheet */}
                                 <div 
-                                  className={`absolute inset-0 w-full h-full overflow-hidden flex flex-col justify-between border-4 ${
+                                  className={`absolute inset-0 w-full h-full overflow-hidden flex flex-col justify-between border-4 transition-all duration-500 ease-in-out ${
                                     settings.darkMode 
                                       ? "bg-[#2B231D] border-[#3D322A]" 
-                                      : "bg-[#FDFBF7] border-[#EADDC9]"
+                                      : settings.sepiaMode
+                                        ? "bg-[#FAF2DF] border-[#DFCDB0]"
+                                        : "bg-[#FDFBF7] border-[#EADDC9]"
                                   }`}
                                   style={{
                                     backfaceVisibility: "hidden",
@@ -2229,6 +2393,7 @@ export default function ThreeDFlipbook({
                                       className="w-full h-full object-contain pointer-events-none"
                                       alt="تحميل"
                                       referrerPolicy="no-referrer"
+                                      style={imageFilterStyle}
                                     />
                                   ) : (
                                     <div className="w-full h-full flex items-center justify-center bg-transparent">
@@ -2251,10 +2416,12 @@ export default function ThreeDFlipbook({
                       <div className="absolute inset-y-0 -left-6 md:-left-12 w-12 md:w-20 flex items-center justify-center z-30">
                         <button
                           onClick={isRTL ? handleNextPage : handlePrevPage}
-                          className={`p-2.5 rounded-full shadow-lg backdrop-blur-md border transition-all ${
+                          className={`p-2.5 rounded-full shadow-lg backdrop-blur-md border transition-all duration-500 ease-in-out ${
                             settings.darkMode 
                               ? "bg-[#27211D]/80 border-[#3A3029] text-[#FAF6EE] hover:bg-[#3A3029]" 
-                              : "bg-white/80 border-[#E6E0D4] text-[#4A3B32] hover:bg-[#FAF6EE]"
+                              : settings.sepiaMode
+                                ? "bg-[#FAF6EE]/80 border-[#DFCDB0] text-[#5C4033] hover:bg-[#FAF0D9]"
+                                : "bg-white/80 border-[#E6E0D4] text-[#4A3B32] hover:bg-[#FAF6EE]"
                           }`}
                           title={isRTL ? "الصفحة التالية" : "الصفحة السابقة"}
                         >
@@ -2265,10 +2432,12 @@ export default function ThreeDFlipbook({
                       <div className="absolute inset-y-0 -right-6 md:-right-12 w-12 md:w-20 flex items-center justify-center z-30">
                         <button
                           onClick={isRTL ? handlePrevPage : handleNextPage}
-                          className={`p-2.5 rounded-full shadow-lg backdrop-blur-md border transition-all ${
+                          className={`p-2.5 rounded-full shadow-lg backdrop-blur-md border transition-all duration-500 ease-in-out ${
                             settings.darkMode 
                               ? "bg-[#27211D]/80 border-[#3A3029] text-[#FAF6EE] hover:bg-[#3A3029]" 
-                              : "bg-white/80 border-[#E6E0D4] text-[#4A3B32] hover:bg-[#FAF6EE]"
+                              : settings.sepiaMode
+                                ? "bg-[#FAF6EE]/80 border-[#DFCDB0] text-[#5C4033] hover:bg-[#FAF0D9]"
+                                : "bg-white/80 border-[#E6E0D4] text-[#4A3B32] hover:bg-[#FAF6EE]"
                           }`}
                           title={isRTL ? "الصفحة السابقة" : "الصفحة التالية"}
                         >
@@ -2285,14 +2454,16 @@ export default function ThreeDFlipbook({
 
           {/* Interactive slider & progress HUD */}
           {isBookLoaded && !settings.readingMode && (
-            <div className={`mt-6 md:mt-10 w-full max-w-xl p-4 rounded-2xl shadow-md border ${
+            <div className={`mt-6 md:mt-10 w-full max-w-xl p-4 rounded-2xl shadow-md border transition-all duration-500 ease-in-out ${
               settings.darkMode 
                 ? "bg-[#27211D] border-[#3A3029]" 
-                : "bg-[#FAF6EE] border-[#E6E0D4]"
+                : settings.sepiaMode
+                  ? "bg-[#EADDC9] border-[#DFCDB0]"
+                  : "bg-[#FAF6EE] border-[#E6E0D4]"
             }`}>
               <div className="flex justify-between items-center text-xs font-semibold mb-2">
                 <span className="font-mono text-[#5A5A40]">{currentPage} / {numPages}</span>
-                <span className="text-[#8D7B68] dark:text-[#CBB59C]">مؤشر تقدم القراءة</span>
+                <span className="text-[#8D7B68] dark:text-[#CBB59C]">{currentLang === "en" ? "Reading Progress" : "مؤشر تقدم القراءة"}</span>
               </div>
               <input 
                 type="range" 
@@ -2318,16 +2489,22 @@ export default function ThreeDFlipbook({
                   }}
                   className="text-[11px] font-medium opacity-75 hover:opacity-100 disabled:opacity-30 hover:text-[#5A5A40]"
                 >
-                  البداية (الغلاف)
+                  {currentLang === "en" ? "Start (Cover)" : "البداية (الغلاف)"}
                 </button>
 
                 {/* Comfortable Reading Mode Quick Switch */}
                 <button
                   onClick={() => setSettings(prev => ({ ...prev, readingMode: !prev.readingMode }))}
-                  className="text-[11px] font-medium flex items-center gap-1.5 px-3 py-1 rounded-lg border border-[#5A5A40]/20 bg-[#5A5A40]/5 text-[#5A5A40] hover:bg-[#5A5A40]/15"
+                  className={`text-[11px] font-medium flex items-center gap-1.5 px-3 py-1 rounded-lg border transition-all duration-300 ${
+                    settings.darkMode 
+                      ? "border-[#5A5A40]/40 bg-[#5A5A40]/10 text-[#CBB59C] hover:bg-[#5A5A40]/25" 
+                      : settings.sepiaMode
+                        ? "border-[#5C4033]/30 bg-[#5C4033]/10 text-[#5C4033] hover:bg-[#5C4033]/20"
+                        : "border-[#5A5A40]/20 bg-[#5A5A40]/5 text-[#5A5A40] hover:bg-[#5A5A40]/15"
+                  }`}
                 >
                   <Eye className="w-3.5 h-3.5" />
-                  <span>{settings.readingMode ? "إظهار الهوامش والواجهة" : "تفعيل القراءة المريحة"}</span>
+                  <span>{settings.readingMode ? t("readingModeOn") : t("readingModeOff")}</span>
                 </button>
 
                 <button
@@ -2338,7 +2515,7 @@ export default function ThreeDFlipbook({
                   }}
                   className="text-[11px] font-medium opacity-75 hover:opacity-100 disabled:opacity-30 hover:text-[#5A5A40]"
                 >
-                  النهاية
+                  {currentLang === "en" ? "End" : "النهاية"}
                 </button>
               </div>
             </div>
@@ -2354,17 +2531,19 @@ export default function ThreeDFlipbook({
               animate={{ x: 0 }}
               exit={{ x: "-100%" }}
               transition={{ type: "spring", damping: 25, stiffness: 180 }}
-              className={`fixed top-0 bottom-0 left-0 w-80 md:w-96 z-50 border-r shadow-2xl flex flex-col ${
+              className={`fixed top-0 bottom-0 left-0 w-80 md:w-96 z-50 border-r shadow-2xl flex flex-col transition-all duration-500 ease-in-out ${
                 settings.darkMode 
                   ? "border-[#3A3029] bg-[#221B17] text-[#FAF6EE]" 
-                  : "border-[#E6E0D4] bg-[#FDFBF7] text-[#4A3B32]"
+                  : settings.sepiaMode
+                    ? "border-[#DFCDB0] bg-[#FAF2DF] text-[#5C4033]"
+                    : "border-[#E6E0D4] bg-[#FDFBF7] text-[#4A3B32]"
               }`}
             >
               {/* Sidebar Header */}
               <div className="p-4 border-b border-[#E6E0D4] dark:border-[#3A3029] flex justify-between items-center">
                 <div className="flex items-center gap-2">
                   <BookOpen className="w-4.5 h-4.5 text-[#5A5A40]" />
-                  <h3 className="font-bold text-[#5A5A40] text-sm">مساعد القراءة الجانبي</h3>
+                  <h3 className="font-bold text-[#5A5A40] text-sm">{currentLang === "en" ? "Reading Assistant" : "مساعد القراءة الجانبي"}</h3>
                 </div>
                 <button 
                   onClick={() => setShowSidebar(false)}
@@ -2384,7 +2563,7 @@ export default function ThreeDFlipbook({
                       : "border-transparent text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
                   }`}
                 >
-                  فهرس الكتاب
+                  {currentLang === "en" ? "Index" : "فهرس الكتاب"}
                 </button>
                 <button
                   onClick={() => setSidebarTab("bookmarks")}
@@ -2394,7 +2573,7 @@ export default function ThreeDFlipbook({
                       : "border-transparent text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
                   }`}
                 >
-                  العلامات ({bookmarks.length})
+                  {currentLang === "en" ? `Bookmarks (${bookmarks.length})` : `العلامات (${bookmarks.length})`}
                 </button>
                 <button
                   onClick={() => setSidebarTab("notes")}
@@ -2404,7 +2583,7 @@ export default function ThreeDFlipbook({
                       : "border-transparent text-neutral-400 hover:text-neutral-600 dark:hover:text-neutral-200"
                   }`}
                 >
-                  الهوامش ({notes.length})
+                  {currentLang === "en" ? `Notes (${notes.length})` : `الهوامش (${notes.length})`}
                 </button>
               </div>
 
@@ -2443,18 +2622,22 @@ export default function ThreeDFlipbook({
               {sidebarTab === "bookmarks" && (
                 <div className="flex-1 p-4 overflow-y-auto space-y-3">
                   <div className="flex items-center justify-between text-xs text-[#5A5A40] font-bold mb-2">
-                    <span>العلامات المرجعية المحفوظة</span>
+                    <span>{currentLang === "en" ? "Saved Bookmarks" : "العلامات المرجعية المحفوظة"}</span>
                     <button
                       onClick={toggleBookmark}
                       className="text-[10px] bg-[#9E4233] text-white px-2.5 py-1 rounded-lg hover:bg-[#853428] transition-colors shadow-sm"
                     >
-                      {bookmarks.some(b => b.page === currentPage) ? "إزالة الحالية" : "حفظ الحالية"}
+                      {bookmarks.some(b => b.page === currentPage) 
+                        ? (currentLang === "en" ? "Remove Current" : "إزالة الحالية") 
+                        : (currentLang === "en" ? "Save Current" : "حفظ الحالية")}
                     </button>
                   </div>
 
                   {bookmarks.length === 0 ? (
                     <div className="text-center py-10 opacity-60 text-xs italic bg-[#5A5A40]/5 p-4 rounded-xl border border-dashed border-[#5A5A40]/20">
-                      لا توجد أي علامات محفوظة بعد. اضغط على أيقونة العلامة لحفظ صفحة توقفك لتتمكن من العودة لاحقاً بضغطة واحدة.
+                      {currentLang === "en" 
+                        ? "No bookmarks saved yet. Click the bookmark icon to save your progress and return here with one click." 
+                        : "لا توجد أي علامات محفوظة بعد. اضغط على أيقونة العلامة لحفظ صفحة توقفك لتتمكن من العودة لاحقاً بضغطة واحدة."}
                     </div>
                   ) : (
                     bookmarks.map((bm) => (
@@ -2475,11 +2658,13 @@ export default function ThreeDFlipbook({
                               playPageTurnSound();
                             }
                           }}
-                          className="hover:underline text-right flex-1"
+                          className={`hover:underline flex-1 ${currentLang === "en" ? "text-left" : "text-right"}`}
                         >
-                          <div className="font-bold text-[#5A5A40]">الصفحة {bm.page}</div>
+                          <div className="font-bold text-[#5A5A40]">
+                            {currentLang === "en" ? `Page ${bm.page}` : `الصفحة ${bm.page}`}
+                          </div>
                           <div className="text-[10px] opacity-50 mt-1">
-                            تم الحفظ: {new Date(bm.createdAt).toLocaleDateString("ar-EG")}
+                            {currentLang === "en" ? "Saved on:" : "تم الحفظ:"} {new Date(bm.createdAt).toLocaleDateString(currentLang === "en" ? "en-US" : "ar-EG")}
                           </div>
                         </button>
                         <button
@@ -2491,7 +2676,7 @@ export default function ThreeDFlipbook({
                           className="text-red-500 hover:text-red-700 font-bold text-[11px] px-2 py-1 rounded hover:bg-red-50 dark:hover:bg-red-950/20"
                           title="إزالة العلامة"
                         >
-                          حذف
+                          {currentLang === "en" ? "Delete" : "حذف"}
                         </button>
                       </div>
                     ))
@@ -2505,13 +2690,13 @@ export default function ThreeDFlipbook({
                   {/* Note adding form */}
                   <form onSubmit={handleAddNote} className="p-4 border-b border-[#E6E0D4] dark:border-[#3A3029]">
                     <div className="flex justify-between text-xs mb-2 text-[#5A5A40] font-bold">
-                      <span>تأليف الهامش على الصفحة الحالية</span>
-                      <span>الصفحة {currentPage}</span>
+                      <span>{currentLang === "en" ? "Compose Margin Note on Current Page" : "تأليف الهامش على الصفحة الحالية"}</span>
+                      <span>{currentLang === "en" ? `Page ${currentPage}` : `الصفحة ${currentPage}`}</span>
                     </div>
                     <textarea
                       value={activeNoteText}
                       onChange={(e) => setActiveNoteText(e.target.value)}
-                      placeholder="اكتب فكرتك أو اقتباسك هنا للرجوع إليها لاحقاً..."
+                      placeholder={currentLang === "en" ? "Write your thoughts or quote here..." : "اكتب فكرتك أو اقتباسك هنا للرجوع إليها لاحقاً..."}
                       rows={3}
                       className={`w-full p-2.5 text-xs rounded-xl border focus:ring-1 focus:ring-[#5A5A40] outline-none ${
                         settings.darkMode 
@@ -2524,17 +2709,19 @@ export default function ThreeDFlipbook({
                       disabled={!activeNoteText.trim()}
                       className="w-full mt-3 bg-[#5A5A40] hover:bg-[#4A4A32] text-white text-xs font-semibold py-2 rounded-lg disabled:opacity-50 transition-colors"
                     >
-                      حفظ الهامش
+                      {currentLang === "en" ? "Save Note" : "حفظ الهامش"}
                     </button>
                   </form>
 
                   {/* Notes list */}
                   <div className="flex-1 p-4 overflow-y-auto space-y-3">
-                    <h4 className="text-xs font-semibold opacity-70 mb-2">الهوامش المحفوظة للكتاب ({notes.length})</h4>
+                    <h4 className="text-xs font-semibold opacity-70 mb-2">
+                      {currentLang === "en" ? `Saved margins for the book (${notes.length})` : `الهوامش المحفوظة للكتاب (${notes.length})`}
+                    </h4>
                     
                     {notes.length === 0 ? (
                       <div className="text-center py-10 opacity-60 text-xs italic">
-                        لا توجد أي هوامش مكتوبة بعد.
+                        {currentLang === "en" ? "No margins written yet." : "لا توجد أي هوامش مكتوبة بعد."}
                       </div>
                     ) : (
                       notes.map((nt) => (
@@ -2556,19 +2743,19 @@ export default function ThreeDFlipbook({
                               }}
                               className="hover:underline text-[10px]"
                             >
-                              الصفحة {nt.page}
+                              {currentLang === "en" ? `Page ${nt.page}` : `الصفحة ${nt.page}`}
                             </button>
                             <button
                               onClick={() => handleDeleteNote(nt.id)}
                               className="text-red-500 hover:text-red-700 font-semibold"
                               title="حذف الهامش"
                             >
-                              حذف
+                              {currentLang === "en" ? "Delete" : "حذف"}
                             </button>
                           </div>
                           <p className="leading-relaxed opacity-90 break-words">{nt.text}</p>
-                          <div className="text-[9px] opacity-50 mt-2 text-left">
-                            {new Date(nt.createdAt).toLocaleString("ar-EG")}
+                          <div className={`text-[9px] opacity-50 mt-2 ${currentLang === "en" ? "text-right" : "text-left"}`}>
+                            {new Date(nt.createdAt).toLocaleString(currentLang === "en" ? "en-US" : "ar-EG")}
                           </div>
                         </div>
                       ))

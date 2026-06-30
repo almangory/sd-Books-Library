@@ -39,4 +39,5 @@ export interface ReadingSettings {
   sepiaMode: boolean; // Warm Sudan Ochre
   readingMode: boolean; // Distraction-free (وضع القراءة المريح)
   zoom: number; // Percentage, e.g. 100, 120, 150
+  language?: "ar" | "en";
 }

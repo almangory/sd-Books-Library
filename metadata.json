@@ -1,7 +1,7 @@
 {
   "name": "Copy of Copy of قارئ الكتب التفاعلي - Flipbook PDF Viewer",
   "description": "تطبيق تفاعلي ثلاثي الأبعاد لتقليب وقراءة الكتب الإلكترونية (PDF) وروابط Google Drive بالهوية البصرية السودانية الدافئة والتشغيل دون اتصال بالإنترنت.",
-  "requestFramePermissions": [],
+  "requestFramePermissions": ["microphone"],
   "majorCapabilities": [
     "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
   ]

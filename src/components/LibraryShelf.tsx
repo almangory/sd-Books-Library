@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { Book } from "../types";
 import { getGoogleDriveDirectLink, isValidUrl } from "../utils/driveParser";
 import { cacheBookBlob, removeCachedBookBlob, getCachedBookBlob, getAllCachedBookIds } from "../utils/indexedDB";
+import { getTranslation } from "../utils/translations";
 import { 
   Plus, 
   BookOpen, 
@@ -29,7 +30,11 @@ import {
   Heart,
   ListPlus,
   Bell,
-  BellRing
+  BellRing,
+  Share2,
+  Mic,
+  MicOff,
+  Globe
 } from "lucide-react";
 
 export const CURRICULUM_STAGES = [
@@ -135,6 +140,8 @@ interface LibraryShelfProps {
   onAdminLogout: () => void;
   adminPassword?: string;
   isOnline?: boolean;
+  language?: "ar" | "en";
+  onChangeLanguage?: (lang: "ar" | "en") => void;
 }
 
 export default function LibraryShelf({
@@ -148,8 +155,12 @@ export default function LibraryShelf({
   onAdminLogin,
   onAdminLogout,
   adminPassword,
-  isOnline = true
+  isOnline = true,
+  language = "ar",
+  onChangeLanguage
 }: LibraryShelfProps) {
+  const t = (key: Parameters<typeof getTranslation>[0]) => getTranslation(key, language);
+
   // Fullscreen state
   const [isFullscreen, setIsFullscreen] = useState<boolean>(false);
 
@@ -314,6 +325,83 @@ export default function LibraryShelf({
   const [selectedTag, setSelectedTag] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
   
+  // Voice Search States and Handlers
+  const [isListening, setIsListening] = useState<boolean>(false);
+  const [speechSupported, setSpeechSupported] = useState<boolean>(true);
+
+  useEffect(() => {
+    return () => {
+      if ((window as any)._activeSpeechRecognition) {
+        try {
+          (window as any)._activeSpeechRecognition.stop();
+        } catch (e) {}
+      }
+    };
+  }, []);
+
+  const handleVoiceSearch = () => {
+    const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      alert("عذراً، متصفحك أو جهازك الحالي لا يدعم ميزة التعرف على الصوت. يرجى استخدام متصفح Google Chrome أو Safari لتفعيل ميزات البحث الصوتي.");
+      setSpeechSupported(false);
+      return;
+    }
+
+    if (isListening) {
+      if ((window as any)._activeSpeechRecognition) {
+        try {
+          (window as any)._activeSpeechRecognition.stop();
+        } catch (e) {}
+      }
+      setIsListening(false);
+      return;
+    }
+
+    try {
+      const rec = new SpeechRecognition();
+      rec.continuous = false;
+      rec.lang = "ar-SA"; // Arabic
+      rec.interimResults = false;
+
+      rec.onstart = () => {
+        setIsListening(true);
+      };
+
+      rec.onresult = (event: any) => {
+        if (event.results && event.results[0] && event.results[0][0]) {
+          const transcript = event.results[0][0].transcript;
+          setSearchQuery(transcript);
+        }
+      };
+
+      rec.onerror = (err: any) => {
+        console.error("Speech recognition error:", err.error);
+        setIsListening(false);
+        
+        const errorType = err.error;
+        if (errorType === "not-allowed") {
+          alert("عذراً، لم نتمكن من الوصول إلى الميكروفون (تم رفض إذن التشغيل).\n\n💡 الحلول المقترحة:\n١. تأكد من السماح بإذن استخدام الميكروفون لهذا التطبيق من خلال إعدادات المتصفح أو أيقونة القفل في شريط العنوان.\n٢. إذا كنت تتصفح من داخل إطار المعاينة التفاعلي لـ AI Studio، يرجى فتح التطبيق في علامة تبويب مستقلة كاملة (Open in a new tab) ليتمكن المتصفح من طلب وتشغيل صلاحيات الميكروفون بنجاح.");
+        } else if (errorType === "no-speech") {
+          alert("لم يتم كشف أي صوت. يرجى المحاولة مجدداً والتحدث بوضوح أمام الميكروفون.");
+        } else if (errorType === "audio-capture") {
+          alert("لم نتمكن من العثور على ميكروفون متاح أو متصل بجهازك. يرجى التحقق من توصيل الميكروفون.");
+        } else if (errorType === "network") {
+          alert("حدث خطأ في الشبكة. يرجى التحقق من اتصالك بالإنترنت والمحاولة مجدداً.");
+        }
+      };
+
+      rec.onend = () => {
+        setIsListening(false);
+      };
+
+      (window as any)._activeSpeechRecognition = rec;
+      rec.start();
+    } catch (e) {
+      console.error("Failed to start speech recognition:", e);
+      setIsListening(false);
+    }
+  };
+  
   // Curriculum Stage States
   const [selectedCurriculumStage, setSelectedCurriculumStage] = useState<string>("all");
   const [newCurriculumStage, setNewCurriculumStage] = useState<string>("");
@@ -411,6 +499,42 @@ export default function LibraryShelf({
   const [isPreviewBookCached, setIsPreviewBookCached] = useState<boolean>(false);
   const [isCachingInProgress, setIsCachingInProgress] = useState<boolean>(false);
   const [cachingError, setCachingError] = useState<string | null>(null);
+  const [shareSuccess, setShareSuccess] = useState<boolean>(false);
+
+  const handleShareBook = async (book: Book) => {
+    const shareUrl = `${window.location.origin}${window.location.pathname}?bookId=${book.id}`;
+    
+    if (navigator.share) {
+      try {
+        await navigator.share({
+          title: book.title,
+          text: `اقرأ كتاب "${book.title}" للكاتب ${book.author} عبر تطبيق مكتبتي الرقمية السودانية التفاعلية.`,
+          url: shareUrl
+        });
+        return;
+      } catch (err) {
+        console.warn("Navigator share failed, falling back to clipboard: ", err);
+      }
+    }
+    
+    // Fallback: Copy to clipboard
+    try {
+      await navigator.clipboard.writeText(shareUrl);
+      setShareSuccess(true);
+      setTimeout(() => setShareSuccess(false), 2500);
+    } catch (clipboardErr) {
+      console.error("Failed to copy link: ", clipboardErr);
+      // Fallback for older browsers
+      const tempInput = document.createElement("input");
+      tempInput.value = shareUrl;
+      document.body.appendChild(tempInput);
+      tempInput.select();
+      document.execCommand("copy");
+      document.body.removeChild(tempInput);
+      setShareSuccess(true);
+      setTimeout(() => setShareSuccess(false), 2500);
+    }
+  };
 
   const refreshCachedBooks = async () => {
     try {
@@ -1004,11 +1128,11 @@ export default function LibraryShelf({
             <div className="flex items-center gap-2 flex-row-reverse">
               <Wifi className="w-4 h-4 text-[#5A5A40] animate-pulse shrink-0" />
               <div className="text-right">
-                <p className="text-xs font-bold">وضع القراءة دون اتصال مفعّل تلقائياً ✔</p>
-                <p className="text-[10px] text-[#6D4C41]">جميع قراءاتك، علاماتك المرجعية، وملاحظاتك المكتوبة يتم مزامنتها وحفظها بأمان على ذاكرة جهازك الحالي.</p>
+                <p className="text-xs font-bold">{language === "en" ? "Offline Reading Mode Enabled Automatically ✔" : "وضع القراءة دون اتصال مفعّل تلقائياً ✔"}</p>
+                <p className="text-[10px] text-[#6D4C41]">{language === "en" ? "All your readings, bookmarks, and written notes are securely synchronized and saved locally on your device." : "جميع قراءاتك، علاماتك المرجعية، وملاحظاتك المكتوبة يتم مزامنتها وحفظها بأمان على ذاكرة جهازك الحالي."}</p>
               </div>
             </div>
-            <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#5A5A40]/15 text-[#5A5A40] font-bold whitespace-nowrap">حفظ ذاتي نشط</span>
+            <span className="text-[9px] px-2 py-0.5 rounded-full bg-[#5A5A40]/15 text-[#5A5A40] font-bold whitespace-nowrap">{language === "en" ? "Active Auto-Save" : "حفظ ذاتي نشط"}</span>
           </div>
         )}
 
@@ -1020,15 +1144,17 @@ export default function LibraryShelf({
           <div className="relative z-10 max-w-2xl mx-auto">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#5A5A40]/10 text-[#5A5A40] text-xs font-bold mb-3 border border-[#5A5A40]/20">
               <Compass className="w-3.5 h-3.5" />
-              <span>هوية سودانية أصيلة ۞ فضاء القراءة الرقمية</span>
+              <span>{language === "en" ? "Authentic Sudanese Identity ۞ Digital Reading Space" : "هوية سودانية أصيلة ۞ فضاء القراءة الرقمية"}</span>
             </div>
             
             <h1 className="text-3xl md:text-4xl font-extrabold tracking-tight text-[#4A3B32] font-serif mb-2.5">
-              مكتبة الكتب التفاعلية
+              {language === "en" ? "Interactive Digital Library" : "مكتبة الكتب التفاعلية"}
             </h1>
             
             <p className="text-sm md:text-base text-[#6D4C41] leading-relaxed max-w-xl mx-auto">
-              تصفح وقراءة الكتب الإلكترونية وتجربة تقليب الصفحات الورقية ثلاثي الأبعاد. ادعم قراءتك دون اتصال وعبر روابط قوقل درايف بلمسات ترابية دافئة.
+              {language === "en" 
+                ? "Browse and read electronic books with a 3D paper page-flipping experience. Support offline reading and Google Drive links with warm earthy tones." 
+                : "تصفح وقراءة الكتب الإلكترونية وتجربة تقليب الصفحات الورقية ثلاثي الأبعاد. ادعم قراءتك دون اتصال وعبر روابط قوقل درايف بلمسات ترابية دافئة."}
             </p>
 
             {/* Quick stats shelf overview */}
@@ -1086,6 +1212,18 @@ export default function LibraryShelf({
                 </button>
               )}
 
+              {/* Bilingual Language Switcher */}
+              {onChangeLanguage && (
+                <button
+                  onClick={() => onChangeLanguage(language === "ar" ? "en" : "ar")}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-[#E6E0D4] bg-white text-[#6D4C41] hover:bg-[#FAF5EC] transition-all text-xs font-bold shadow-sm"
+                  title={language === "ar" ? "Switch to English" : "التحويل للغة العربية"}
+                >
+                  <Globe className="w-3.5 h-3.5 text-[#5A5A40]" />
+                  <span>{language === "ar" ? "English" : "العربية"}</span>
+                </button>
+              )}
+
               <button
                 onClick={toggleFullscreen}
                 className={`p-2 rounded-xl border transition-all ${
@@ -1093,7 +1231,7 @@ export default function LibraryShelf({
                     ? "bg-[#5A5A40] border-[#5A5A40] text-white" 
                     : "border-[#E6E0D4] bg-white text-[#6D4C41] hover:bg-[#FAF5EC]"
                 }`}
-                title={isFullscreen ? "إنهاء ملء الشاشة" : "ملء الشاشة بالكامل"}
+                title={isFullscreen ? (language === "en" ? "Exit Fullscreen" : "إنهاء ملء الشاشة") : (language === "en" ? "Enter Fullscreen" : "ملء الشاشة بالكامل")}
               >
                 {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
               </button>
@@ -1186,7 +1324,7 @@ export default function LibraryShelf({
                         })
                       ) : (
                         <div className="p-8 text-center text-xs text-neutral-500">
-                          لا توجد كتب مضافة في المكتبة حالياً
+                          {language === "en" ? "No books added to the library currently" : "لا توجد كتب مضافة في المكتبة حالياً"}
                         </div>
                       )}
                     </div>
@@ -1258,15 +1396,17 @@ export default function LibraryShelf({
         <section className="mb-14">
           {/* Category Tabs */}
           <div className="mb-8 border-b border-[#E6E0D4] pb-4">
-            <h3 className="text-xs font-bold text-[#6D4C41] mb-2.5 text-right">۞ تصنيفات المكتبة التفاعلية:</h3>
-            <div className="flex items-center gap-2 justify-start overflow-x-auto py-1.5 scrollbar-none flex-row-reverse">
+            <h3 className={`text-xs font-bold text-[#6D4C41] mb-2.5 ${language === "en" ? "text-left" : "text-right"}`}>
+              {language === "en" ? "۞ Interactive Library Categories:" : "۞ تصنيفات المكتبة التفاعلية:"}
+            </h3>
+            <div className={`flex items-center gap-2 justify-start overflow-x-auto py-1.5 scrollbar-none ${language === "en" ? "flex-row" : "flex-row-reverse"}`}>
               {[
-                { id: "all", label: "الكل", icon: "📚", count: books.length },
-                { id: "favorites", label: "المفضلة 💖", icon: "❤️", count: books.filter(b => favorites.includes(b.id)).length },
-                { id: "curriculum", label: "مناهج وزارة التربية والتعليم", icon: "🏫", count: books.filter(b => b.category === "curriculum").length },
-                { id: "children", label: "كتب للأطفال", icon: "👶", count: books.filter(b => b.category === "children").length },
-                { id: "religious", label: "المكتبة الدينية", icon: "🕌", count: books.filter(b => b.category === "religious").length },
-                { id: "general", label: "كتب عامة وروايات", icon: "🖋️", count: books.filter(b => b.category === "general" || !b.category).length }
+                { id: "all", label: language === "en" ? "All" : "الكل", icon: "📚", count: books.length },
+                { id: "favorites", label: language === "en" ? "Favorites 💖" : "المفضلة 💖", icon: "❤️", count: books.filter(b => favorites.includes(b.id)).length },
+                { id: "curriculum", label: language === "en" ? "Ministry of Education" : "مناهج وزارة التربية والتعليم", icon: "🏫", count: books.filter(b => b.category === "curriculum").length },
+                { id: "children", label: language === "en" ? "Children's Books" : "كتب للأطفال", icon: "👶", count: books.filter(b => b.category === "children").length },
+                { id: "religious", label: language === "en" ? "Religious Library" : "المكتبة الدينية", icon: "🕌", count: books.filter(b => b.category === "religious").length },
+                { id: "general", label: language === "en" ? "General Books" : "كتب عامة وروايات", icon: "🖋️", count: books.filter(b => b.category === "general" || !b.category).length }
               ].map((cat) => {
                 const isActive = activeTab === cat.id;
                 return (
@@ -1411,40 +1551,64 @@ export default function LibraryShelf({
           {/* Sorting and Tagging Controls Row */}
           <div className="mb-8 flex flex-col lg:flex-row gap-4 items-center justify-between p-4 bg-[#FAF5EC]/70 rounded-2xl border border-[#E6E0D4] text-xs">
             {/* Search Input */}
-            <div className="relative w-full lg:w-80 flex items-center">
+            <div className="relative w-full lg:w-80 flex items-center" dir={language === "en" ? "ltr" : "rtl"}>
               <input
                 type="text"
-                placeholder="ابحث عن اسم الكتاب أو المؤلف..."
+                placeholder={language === "en" ? "Search by book title or author..." : "ابحث عن اسم الكتاب أو المؤلف..."}
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
-                className="w-full bg-white border border-[#E6E0D4] rounded-xl pl-10 pr-8 py-2 text-right text-xs text-[#4A3B32] font-semibold placeholder-[#8D7B68]/50 focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/35 focus:border-[#5A5A40] transition-all"
-                dir="rtl"
+                className={`w-full bg-white border border-[#E6E0D4] rounded-xl py-2 text-xs text-[#4A3B32] font-semibold placeholder-[#8D7B68]/50 focus:outline-none focus:ring-2 focus:ring-[#5A5A40]/35 focus:border-[#5A5A40] transition-all ${
+                  language === "en" ? "pl-8 pr-16 text-left" : "pl-16 pr-8 text-right"
+                }`}
+                dir={language === "en" ? "ltr" : "rtl"}
               />
-              <div className="absolute left-3 top-1/2 -translate-y-1/2 text-[#8D7B68]/60 pointer-events-none">
+              <div className={`absolute top-1/2 -translate-y-1/2 text-[#8D7B68]/60 pointer-events-none ${
+                language === "en" ? "right-3" : "left-3"
+              }`}>
                 <Search className="w-4 h-4" />
               </div>
+              <button
+                type="button"
+                onClick={handleVoiceSearch}
+                className={`absolute top-1/2 -translate-y-1/2 p-1.5 rounded-full transition-all duration-300 ${
+                  isListening 
+                    ? "text-[#D32F2F] bg-red-50 hover:bg-red-100 animate-pulse scale-110 ring-2 ring-red-300" 
+                    : "text-[#8D7B68]/60 hover:text-[#5A5A40] hover:bg-[#FAF5EC]"
+                } ${
+                  language === "en" ? "right-9" : "left-9"
+                }`}
+                title={isListening ? (language === "en" ? "Stop Voice Search" : "إيقاف البحث الصوتي") : (language === "en" ? "Smart Voice Search (Arabic)" : "البحث الصوتي الذكي (بالعربية)")}
+              >
+                <Mic className="w-3.5 h-3.5" />
+              </button>
               {searchQuery && (
                 <button
                   onClick={() => setSearchQuery("")}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-[#8D7B68]/60 hover:text-[#9E4233] transition-colors"
+                  className={`absolute top-1/2 -translate-y-1/2 text-[#8D7B68]/60 hover:text-[#9E4233] transition-colors ${
+                    language === "en" ? "left-3" : "right-3"
+                  }`}
                 >
                   <X className="w-3.5 h-3.5" />
                 </button>
               )}
             </div>
 
-            <div className="flex flex-wrap items-center gap-3 w-full lg:w-auto justify-end flex-row-reverse">
-              <span className="font-bold text-[#6D4C41] shrink-0">۞ خيارات التصفية والفرز:</span>
+            <div className={`flex flex-wrap items-center gap-3 w-full lg:w-auto ${language === "en" ? "justify-start flex-row" : "justify-end flex-row-reverse"}`}>
+              <span className="font-bold text-[#6D4C41] shrink-0">
+                {language === "en" ? "۞ Filter & Sort Options:" : "۞ خيارات التصفية والفرز:"}
+              </span>
               
-              <div className="flex items-center gap-1.5 flex-row-reverse">
-                <label className="text-[#8D7B68] font-medium whitespace-nowrap">الفرز حسب:</label>
+              <div className={`flex items-center gap-1.5 ${language === "en" ? "flex-row" : "flex-row-reverse"}`}>
+                <label className="text-[#8D7B68] font-medium whitespace-nowrap">
+                  {language === "en" ? "Sort by:" : "الفرز حسب:"}
+                </label>
                 <select
                   value={sortBy}
                   onChange={(e) => setSortBy(e.target.value as "date" | "alphabet")}
                   className="bg-white border border-[#E6E0D4] rounded-lg px-2.5 py-1.5 text-[#4A3B32] font-semibold focus:outline-none focus:ring-1 focus:ring-[#5A5A40] cursor-pointer"
                 >
-                  <option value="date">تاريخ الإضافة (الأحدث أولاً)</option>
-                  <option value="alphabet">الترتيب الأبجدي (أ - ي)</option>
+                  <option value="date">{language === "en" ? "Date Added (Newest First)" : "تاريخ الإضافة (الأحدث أولاً)"}</option>
+                  <option value="alphabet">{language === "en" ? "Alphabetical Order (A - Z)" : "الترتيب الأبجدي (أ - ي)"}</option>
                 </select>
               </div>
 
@@ -1495,10 +1659,10 @@ export default function LibraryShelf({
               {[
                 {
                   id: "curriculum",
-                  title: "مناهج وزارة التربية والتعليم",
-                  description: "المناهج المدرسية الرسمية والكتب التعليمية لمختلف المراحل الدراسية في السودان.",
+                  title: language === "en" ? "Ministry of Education Curriculums" : "مناهج وزارة التربية والتعليم",
+                  description: language === "en" ? "Official school curricula and educational books for various educational stages in Sudan." : "المناهج المدرسية الرسمية والكتب التعليمية لمختلف المراحل الدراسية في السودان.",
                   icon: "🏫",
-                  badge: "المكتبة الأكاديمية",
+                  badge: language === "en" ? "Academic Library" : "المكتبة الأكاديمية",
                   count: books.filter(b => b.category === "curriculum").length,
                   bg: "bg-gradient-to-br from-[#1b4d3e] to-[#0f2d24]",
                   banner: "bg-[#FFD54F] text-stone-900 font-extrabold",
@@ -1508,10 +1672,10 @@ export default function LibraryShelf({
                 },
                 {
                   id: "children",
-                  title: "كتب وحكايات الأطفال",
-                  description: "مملكة الصغار! قصص مصورة ومغامرات شيقة وممتعة تنمي عقول أبطالنا وبراعمنا.",
+                  title: language === "en" ? "Children's Books & Stories" : "كتب وحكايات الأطفال",
+                  description: language === "en" ? "The kingdom of little ones! Picture stories and exciting adventures to nourish children's minds." : "مملكة الصغار! قصص مصورة ومغامرات شيقة وممتعة تنمي عقول أبطالنا وبراعمنا.",
                   icon: "🧸⭐🎈",
-                  badge: "مملكة البراعم 🎈",
+                  badge: language === "en" ? "Kids Kingdom 🎈" : "مملكة البراعم 🎈",
                   count: books.filter(b => b.category === "children").length,
                   bg: "bg-gradient-to-br from-[#FF4E50] via-[#F9D423] to-[#FF4E50]", // Bright vibrant warm candy gradient
                   banner: "bg-white text-rose-600 font-extrabold shadow-md border-2 border-rose-100 animate-pulse",
@@ -1522,10 +1686,10 @@ export default function LibraryShelf({
                 },
                 {
                   id: "religious",
-                  title: "المكتبة الدينية والشرعية",
-                  description: "المصاحف الشريفة، التفسير، السيرة النبوية العطرة، ومخطوطات العلوم الشرعية.",
+                  title: language === "en" ? "Islamic & Religious Library" : "المكتبة الدينية والشرعية",
+                  description: language === "en" ? "Holy Qurans, Tafsir, Prophet's Biography, and manuscripts of Islamic sciences." : "المصاحف الشريفة، التفسير، السيرة النبوية العطرة، ومخطوطات العلوم الشرعية.",
                   icon: "🕌",
-                  badge: "العلوم الإسلامية",
+                  badge: language === "en" ? "Islamic Sciences" : "العلوم الإسلامية",
                   count: books.filter(b => b.category === "religious").length,
                   bg: "bg-gradient-to-br from-[#06331e] via-[#0b5331] to-[#041a10]",
                   banner: "bg-[#D4A373] text-stone-900 font-bold",
@@ -1535,10 +1699,10 @@ export default function LibraryShelf({
                 },
                 {
                   id: "general",
-                  title: "الكتب العامة وروايات الأدب",
-                  description: "روايات عالمية ومحلية، دواوين الشعر العربي والسوداني الخالد، وكتب التاريخ والثقافة.",
+                  title: language === "en" ? "General Books & Literary Novels" : "الكتب العامة وروايات الأدب",
+                  description: language === "en" ? "International and local novels, timeless Arabic and Sudanese poetry, and cultural books." : "روايات عالمية ومحلية، دواوين الشعر العربي والسوداني الخالد، وكتب التاريخ والثقافة.",
                   icon: "🖋️",
-                  badge: "الأدب والثقافة",
+                  badge: language === "en" ? "Literature & Culture" : "الأدب والثقافة",
                   count: books.filter(b => b.category === "general" || !b.category).length,
                   bg: "bg-gradient-to-br from-[#5D4037] to-[#2B1B17]",
                   banner: "bg-[#9E4233] text-white font-bold",
@@ -1635,16 +1799,16 @@ export default function LibraryShelf({
                     
                     <div className="relative z-10 flex-1 flex flex-col justify-between h-full">
                       <div className="py-1 px-1.5 rounded-md text-center bg-white/20 text-[9px] font-extrabold tracking-wider text-amber-100 truncate">
-                        الأقسام الرئيسية
+                        {language === "en" ? "Main Departments" : "الأقسام الرئيسية"}
                       </div>
                       
                       <div className="my-auto text-center py-2 px-1 flex flex-col items-center">
                         <span className="text-3xl animate-bounce">↩</span>
                         <p className="font-serif font-extrabold text-xs md:text-sm text-yellow-50 leading-snug mt-2">
-                          الرجوع للرف الرئيسي
+                          {language === "en" ? "Back to Main Shelf" : "الرجوع للرف الرئيسي"}
                         </p>
                         <p className="text-[9px] text-amber-200/80 mt-1 leading-normal">
-                          تصفح باقي الأقسام
+                          {language === "en" ? "Browse other departments" : "تصفح باقي الأقسام"}
                         </p>
                       </div>
                       
@@ -1663,8 +1827,12 @@ export default function LibraryShelf({
                 </div>
                 
                 <div className="mt-8 text-right z-10 px-1">
-                  <h3 className="font-bold text-xs text-[#6D4C41]">رجوع للرف الرئيسي</h3>
-                  <p className="text-[10px] opacity-75">تصفح الرفوف والأقسام الأخرى</p>
+                  <h3 className="font-bold text-xs text-[#6D4C41]">
+                    {language === "en" ? "Back to Main Shelf" : "رجوع للرف الرئيسي"}
+                  </h3>
+                  <p className="text-[10px] opacity-75">
+                    {language === "en" ? "Browse other shelves & departments" : "تصفح الرفوف والأقسام الأخرى"}
+                  </p>
                 </div>
               </div>
 
@@ -1763,16 +1931,16 @@ export default function LibraryShelf({
                     
                     <div className="relative z-10 flex-1 flex flex-col justify-between h-full">
                       <div className="py-1 px-1.5 rounded-md text-center bg-white/20 text-[9px] font-extrabold tracking-wider text-amber-100 truncate">
-                        الأقسام الرئيسية
+                        {language === "en" ? "Main Departments" : "الأقسام الرئيسية"}
                       </div>
                       
                       <div className="my-auto text-center py-2 px-1 flex flex-col items-center">
                         <span className="text-3xl animate-bounce">↩</span>
                         <p className="font-serif font-extrabold text-xs md:text-sm text-yellow-50 leading-snug mt-2">
-                          الرجوع للرف الرئيسي
+                          {language === "en" ? "Back to Main Shelf" : "الرجوع للرف الرئيسي"}
                         </p>
                         <p className="text-[9px] text-amber-200/80 mt-1 leading-normal">
-                          تصفح باقي الأقسام
+                          {language === "en" ? "Browse other departments" : "تصفح باقي الأقسام"}
                         </p>
                       </div>
                       
@@ -1791,8 +1959,12 @@ export default function LibraryShelf({
                 </div>
                 
                 <div className="mt-8 text-right z-10 px-1">
-                  <h3 className="font-bold text-xs text-[#6D4C41]">رجوع للرف الرئيسي</h3>
-                  <p className="text-[10px] opacity-75">تصفح الرفوف والأقسام الأخرى</p>
+                  <h3 className="font-bold text-xs text-[#6D4C41]">
+                    {language === "en" ? "Back to Main Shelf" : "رجوع للرف الرئيسي"}
+                  </h3>
+                  <p className="text-[10px] opacity-75">
+                    {language === "en" ? "Browse other shelves & departments" : "تصفح الرفوف والأقسام الأخرى"}
+                  </p>
                 </div>
               </div>
 
@@ -1864,8 +2036,12 @@ export default function LibraryShelf({
           ) : sortedAndFilteredBooks.length === 0 ? (
             <div className="text-center py-16 px-4 bg-[#FAF5EC]/40 rounded-3xl border border-[#E6E0D4] border-dashed">
               <span className="text-3xl">📭</span>
-              <p className="text-xs font-bold text-[#8D7B68] mt-3">لا توجد كتب مطابقة لخيارات التصفية الحالية.</p>
-              <p className="text-[11px] text-[#8D7B68]/70 mt-1">انقر على أزرار الإضافة في الأعلى لملء هذا الرف!</p>
+              <p className="text-xs font-bold text-[#8D7B68] mt-3">
+                {language === "en" ? "No books match the current filter options." : "لا توجد كتب مطابقة لخيارات التصفية الحالية."}
+              </p>
+              <p className="text-[11px] text-[#8D7B68]/70 mt-1">
+                {language === "en" ? "Click the add buttons above or reset filters to view books!" : "انقر على أزرار الإضافة في الأعلى لملء هذا الرف!"}
+              </p>
             </div>
           ) : (
             <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-y-12 sm:gap-y-16 gap-x-4 sm:gap-x-6 md:gap-x-8">
@@ -1894,27 +2070,27 @@ export default function LibraryShelf({
                       <div className="relative z-10 flex-1 flex flex-col justify-between h-full">
                         <div className="py-1 px-1.5 rounded-md text-center bg-white/20 text-[9px] font-extrabold tracking-wider text-amber-100 truncate">
                           {activeTab === "curriculum" && selectedCurriculumStage !== "all" 
-                            ? "مناهج وزارة التربية" 
+                            ? (language === "en" ? "Ministry Curriculums" : "مناهج وزارة التربية") 
                             : activeTab === "children" && selectedChildrenSection !== "all"
-                            ? "قصص وحكايات الأطفال"
-                            : "رفوف الأقسام الرئيسية"}
+                            ? (language === "en" ? "Kids Stories" : "قصص وحكايات الأطفال")
+                            : (language === "en" ? "Main Shelves" : "رفوف الأقسام الرئيسية")}
                         </div>
                         
                         <div className="my-auto text-center py-2 px-1 flex flex-col items-center">
                           <span className="text-3xl animate-bounce">↩</span>
                           <p className="font-serif font-extrabold text-xs md:text-sm text-yellow-50 leading-snug mt-2">
                             {activeTab === "curriculum" && selectedCurriculumStage !== "all" 
-                              ? "الرجوع للمراحل الدراسية" 
+                              ? (language === "en" ? "Back to Grade Levels" : "الرجوع للمراحل الدراسية") 
                               : activeTab === "children" && selectedChildrenSection !== "all"
-                              ? "الرجوع لأقسام الأطفال"
-                              : "الرجوع للرف الرئيسي"}
+                              ? (language === "en" ? "Back to Kids Sections" : "الرجوع لأقسام الأطفال")
+                              : (language === "en" ? "Back to Main Shelf" : "الرجوع للرف الرئيسي")}
                           </p>
                           <p className="text-[9px] text-amber-200/80 mt-1 leading-normal">
                             {activeTab === "curriculum" && selectedCurriculumStage !== "all" 
-                              ? "تصفح باقي الصفوف والمراحل" 
+                              ? (language === "en" ? "Browse other grades & stages" : "تصفح باقي الصفوف والمراحل") 
                               : activeTab === "children" && selectedChildrenSection !== "all"
-                              ? "تصفح باقي تصنيفات حكايات الأطفال"
-                              : "تصفح باقي التصنيفات"}
+                              ? (language === "en" ? "Browse other story categories" : "تصفح باقي تصنيفات حكايات الأطفال")
+                              : (language === "en" ? "Browse other categories" : "تصفح باقي التصنيفات")}
                           </p>
                         </div>
                         
@@ -1935,17 +2111,17 @@ export default function LibraryShelf({
                   <div className="mt-8 text-right z-10 px-1">
                     <h3 className="font-bold text-xs text-[#6D4C41]">
                       {activeTab === "curriculum" && selectedCurriculumStage !== "all" 
-                        ? "رجوع للمراحل الدراسية" 
+                        ? (language === "en" ? "Back to Grade Levels" : "رجوع للمراحل الدراسية") 
                         : activeTab === "children" && selectedChildrenSection !== "all"
-                        ? "رجوع لأقسام الأطفال"
-                        : "رجوع للرف الرئيسي"}
+                        ? (language === "en" ? "Back to Kids Sections" : "رجوع لأقسام الأطفال")
+                        : (language === "en" ? "Back to Main Shelf" : "رجوع للرف الرئيسي")}
                     </h3>
                     <p className="text-[10px] opacity-75">
                       {activeTab === "curriculum" && selectedCurriculumStage !== "all" 
-                        ? "تصفح الصفوف والمراحل التعليمية" 
+                        ? (language === "en" ? "Browse school grades & academic stages" : "تصفح الصفوف والمراحل التعليمية") 
                         : activeTab === "children" && selectedChildrenSection !== "all"
-                        ? "تصفح تصنيفات قصص الأطفال"
-                        : "تصفح الرفوف والأقسام الأخرى"}
+                        ? (language === "en" ? "Browse children story sections" : "تصفح تصنيفات قصص الأطفال")
+                        : (language === "en" ? "Browse other shelves & departments" : "تصفح الرفوف والأقسام الأخرى")}
                     </p>
                   </div>
                 </div>
@@ -2943,6 +3119,20 @@ export default function LibraryShelf({
                   >
                     إغلاق النافذة
                   </button>
+                  
+                  <button
+                    type="button"
+                    onClick={() => handleShareBook(previewBook)}
+                    className={`flex-1 py-2.5 rounded-xl border transition-colors flex items-center justify-center gap-1.5 text-xs font-bold ${
+                      shareSuccess 
+                        ? "bg-emerald-50 border-emerald-300 text-emerald-700 hover:bg-emerald-100" 
+                        : "border-[#D6CAB2] hover:bg-[#F3ECE0] text-[#6D4C41]"
+                    }`}
+                  >
+                    <Share2 className="w-3.5 h-3.5" />
+                    <span>{shareSuccess ? "تم النسخ!" : "مشاركة"}</span>
+                  </button>
+
                   <button
                     type="button"
                     onClick={() => {
