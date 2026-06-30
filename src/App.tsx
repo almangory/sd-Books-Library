@@ -3,8 +3,10 @@ import { Book, ReadingSettings } from "./types";
 import LibraryShelf from "./components/LibraryShelf";
 import ThreeDFlipbook from "./components/ThreeDFlipbook";
 import SupabaseRequirements from "./components/SupabaseRequirements";
+import OnboardingTutorial from "./components/OnboardingTutorial";
 import { LogOut, X, AlertCircle } from "lucide-react";
 import { getTranslation } from "./utils/translations";
+import { AnimatePresence } from "motion/react";
 
 // Curated default books representing traditional Sudanese literature, history, and education.
 const DEFAULT_BOOKS: Book[] = [];
@@ -12,6 +14,9 @@ const DEFAULT_BOOKS: Book[] = [];
 export default function App() {
   const [view, setView] = useState<"shelf" | "reader" | "supabase">("shelf");
   const [selectedBook, setSelectedBook] = useState<Book | null>(null);
+  const [showOnboarding, setShowOnboarding] = useState<boolean>(() => {
+    return localStorage.getItem("flipbook_onboarding_completed") !== "true";
+  });
   
   const [isAdmin, setIsAdmin] = useState<boolean>(() => {
     return sessionStorage.getItem("flipbook_is_admin") === "true";
@@ -453,6 +458,7 @@ export default function App() {
           isOnline={isOnline}
           language={currentLang}
           onChangeLanguage={(lang) => setSettings(prev => ({ ...prev, language: lang }))}
+          onOpenTutorial={() => setShowOnboarding(true)}
         />
       )}
 
@@ -515,6 +521,15 @@ export default function App() {
           </div>
         </div>
       )}
+
+      <AnimatePresence>
+        {showOnboarding && (
+          <OnboardingTutorial 
+            language={currentLang} 
+            onClose={() => setShowOnboarding(false)} 
+          />
+        )}
+      </AnimatePresence>
     </div>
   );
 }

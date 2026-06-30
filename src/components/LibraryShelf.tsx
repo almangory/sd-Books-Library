@@ -142,6 +142,7 @@ interface LibraryShelfProps {
   isOnline?: boolean;
   language?: "ar" | "en";
   onChangeLanguage?: (lang: "ar" | "en") => void;
+  onOpenTutorial?: () => void;
 }
 
 export default function LibraryShelf({
@@ -157,7 +158,8 @@ export default function LibraryShelf({
   adminPassword,
   isOnline = true,
   language = "ar",
-  onChangeLanguage
+  onChangeLanguage,
+  onOpenTutorial
 }: LibraryShelfProps) {
   const t = (key: Parameters<typeof getTranslation>[0]) => getTranslation(key, language);
 
@@ -1202,13 +1204,24 @@ export default function LibraryShelf({
                 </button>
               )}
 
+              {onOpenTutorial && (
+                <button
+                  onClick={onOpenTutorial}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-xl border border-amber-200 bg-amber-50/50 text-amber-800 hover:bg-amber-100/80 transition-all text-xs font-bold shadow-sm"
+                  title={language === "en" ? "Interactive User Guide" : "دليل الاستخدام والتشغيل"}
+                >
+                  <HelpCircle className="w-3.5 h-3.5 text-amber-700 animate-pulse" />
+                  <span>{language === "en" ? "User Guide 💡" : "دليل الاستخدام 💡"}</span>
+                </button>
+              )}
+
               {isAdmin && (
                 <button
                   onClick={() => setShowHelp(!showHelp)}
                   className="p-2 rounded-xl border border-[#E6E0D4] bg-white text-[#6D4C41] hover:bg-[#FAF5EC] transition-all"
-                  title="مساعدة وإرشادات"
+                  title="مساعدة وإرشادات المشرف"
                 >
-                  <HelpCircle className="w-4 h-4" />
+                  <AlertCircle className="w-4 h-4 text-amber-700" />
                 </button>
               )}
 

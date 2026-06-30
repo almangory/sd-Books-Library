@@ -1821,38 +1821,57 @@ export default function ThreeDFlipbook({
         </div>
       )}
 
-      {/* Reading Mode floating HUD */}
+      {/* Persistent Prominent Floating Back to Library Button at the Edge of the Screen (Fullscreen & Reading Mode) */}
+      {(settings.readingMode || isFullscreen) && (
+        <div 
+          className={`fixed top-4 ${currentLang === "en" ? "left-4" : "right-4"} z-50 animate-fade-in`}
+          id="reading_mode_persistent_back"
+        >
+          <button
+            onClick={onBackToLibrary}
+            className={`flex items-center gap-2 px-4 py-2.5 md:px-5 md:py-3 rounded-full shadow-[0_12px_30px_rgba(0,0,0,0.35)] hover:shadow-[0_16px_36px_rgba(0,0,0,0.45)] transition-all duration-300 hover:scale-105 active:scale-95 group font-extrabold text-xs border-2 select-none ${
+              settings.darkMode
+                ? "bg-amber-600 border-amber-400 text-[#1E1916] hover:bg-amber-500"
+                : settings.sepiaMode
+                  ? "bg-[#5C4033] border-[#FAF6EE] text-white hover:bg-[#4E3529]"
+                  : "bg-[#1b4d3e] border-white text-white hover:bg-[#12352b]"
+            }`}
+            title={currentLang === "en" ? "Back to Library" : "الرجوع للمكتبة"}
+          >
+            {currentLang === "en" ? (
+              <>
+                <ChevronLeft className="w-4 h-4 md:w-4.5 md:h-4.5 text-white transition-transform group-hover:-translate-x-1 animate-pulse" />
+                <span className="tracking-wide text-[11px] md:text-sm">Back to Library 📚</span>
+              </>
+            ) : (
+              <>
+                <ChevronRight className="w-4 h-4 md:w-4.5 md:h-4.5 text-white transition-transform group-hover:translate-x-1 animate-pulse" />
+                <span className="font-serif text-[11px] md:text-sm">الرجوع للمكتبة 📚</span>
+              </>
+            )}
+          </button>
+        </div>
+      )}
+
+      {/* Reading Mode floating HUD (on opposite side of back button) */}
       {settings.readingMode && showReadingHud && (
-        <div className="fixed top-5 right-5 z-50 flex items-center gap-3 animate-in fade-in slide-in-from-top-3 duration-200">
+        <div className={`fixed top-5 ${currentLang === "en" ? "right-5" : "left-5"} z-50 flex items-center gap-3 animate-in fade-in slide-in-from-top-3 duration-200`}>
           <button
             onClick={() => {
               setSettings(prev => ({ ...prev, readingMode: false }));
               setShowReadingHud(false);
             }}
-            className={`flex items-center gap-2 px-4 py-2 rounded-full shadow-xl text-xs font-semibold backdrop-blur-md transition-all duration-300 ${
+            className={`flex items-center gap-2 px-4.5 py-2.5 rounded-full shadow-xl text-xs font-semibold backdrop-blur-md transition-all duration-300 border ${
               settings.darkMode 
-                ? "bg-[#27211D]/95 text-[#FAF6EE] hover:bg-[#3A3029] border border-[#3A3029]" 
+                ? "bg-[#27211D]/95 text-[#FAF6EE] hover:bg-[#3A3029] border-[#3A3029]" 
                 : settings.sepiaMode
-                  ? "bg-[#FAF6EE]/95 text-[#5C4033] border border-[#DFCDB0] hover:bg-[#FAF0D9]"
+                  ? "bg-[#FAF6EE]/95 text-[#5C4033] border-[#DFCDB0] hover:bg-[#FAF0D9]"
                   : "bg-white/95 text-[#4A3B32] border border-[#E6E0D4] hover:bg-[#FDFBF7]"
             }`}
+            title={currentLang === "en" ? "Show standard toolbar" : "عرض شريط الأدوات العادي"}
           >
-            <Eye className="w-4 h-4 text-[#5A5A40]" />
-            <span>عرض بقية الواجهة</span>
-          </button>
-          
-          <button
-            onClick={onBackToLibrary}
-            className={`p-2.5 rounded-full shadow-xl backdrop-blur-md transition-all duration-300 ${
-              settings.darkMode 
-                ? "bg-[#27211D]/95 text-white hover:bg-[#3A3029] border border-[#3A3029]" 
-                : settings.sepiaMode
-                  ? "bg-[#FAF6EE]/95 text-[#5C4033] border border-[#DFCDB0] hover:bg-[#FAF0D9]"
-                  : "bg-white/95 text-[#4A3B32] border border-[#E6E0D4] hover:bg-[#FDFBF7]"
-            }`}
-            title="رجوع للمكتبة"
-          >
-            <ChevronRight className="w-5 h-5" />
+            <Eye className="w-4 h-4 text-amber-600" />
+            <span>{currentLang === "en" ? "Show Interface" : "عرض بقية الواجهة"}</span>
           </button>
         </div>
       )}
