@@ -50,11 +50,29 @@ async function startServer() {
         if (contentType.includes("text/html")) {
           const text = await response.text();
           
-          // Look for confirmation token in the HTML (usually confirm=xxxx)
-          const confirmMatch = text.match(/confirm=([a-zA-Z0-9_]+)/) || text.match(/uuid=([a-zA-Z0-9_-]+)/);
-          if (confirmMatch && confirmMatch[1]) {
-            const confirmToken = confirmMatch[1];
-            const confirmUrl = `https://drive.usercontent.google.com/download?id=${id}&export=download&confirm=${confirmToken}`;
+          // Look for confirmation token in the HTML (handles direct confirm=xxxx and form fields name="confirm" value="xxxx")
+          let confirmToken = "";
+          let uuidToken = "";
+
+          const confirmMatch = text.match(/confirm=([a-zA-Z0-9_-]+)/) || 
+                               text.match(/name="confirm"\s+value="([^"]+)"/) || 
+                               text.match(/name='confirm'\s+value='([^']+)'/);
+          if (confirmMatch) {
+            confirmToken = confirmMatch[1];
+          }
+
+          const uuidMatch = text.match(/uuid=([a-zA-Z0-9_-]+)/) || 
+                            text.match(/name="uuid"\s+value="([^"]+)"/) || 
+                            text.match(/name='uuid'\s+value='([^']+)'/);
+          if (uuidMatch) {
+            uuidToken = uuidMatch[1];
+          }
+
+          if (confirmToken) {
+            let confirmUrl = `https://drive.usercontent.google.com/download?id=${id}&export=download&confirm=${confirmToken}`;
+            if (uuidToken) {
+              confirmUrl += `&uuid=${uuidToken}`;
+            }
             
             // Get the set-cookie headers from the initial response (CRITICAL for Google Drive authorization)
             const cookies = response.headers.get("set-cookie") || "";
