@@ -3,6 +3,7 @@ import { Book } from "../types";
 import { getGoogleDriveDirectLink, isValidUrl } from "../utils/driveParser";
 import { cacheBookBlob, removeCachedBookBlob, getCachedBookBlob, getAllCachedBookIds } from "../utils/indexedDB";
 import { getTranslation } from "../utils/translations";
+import ReadingStatsPanel from "./ReadingStatsPanel";
 import { 
   Plus, 
   BookOpen, 
@@ -143,6 +144,8 @@ interface LibraryShelfProps {
   language?: "ar" | "en";
   onChangeLanguage?: (lang: "ar" | "en") => void;
   onOpenTutorial?: () => void;
+  readBookIds?: string[];
+  readingTimeByDate?: Record<string, number>;
 }
 
 export default function LibraryShelf({
@@ -159,7 +162,9 @@ export default function LibraryShelf({
   isOnline = true,
   language = "ar",
   onChangeLanguage,
-  onOpenTutorial
+  onOpenTutorial,
+  readBookIds = [],
+  readingTimeByDate = {}
 }: LibraryShelfProps) {
   const t = (key: Parameters<typeof getTranslation>[0]) => getTranslation(key, language);
 
@@ -1404,6 +1409,14 @@ export default function LibraryShelf({
             </button>
           </div>
         )}
+
+        {/* Statistics Dashboard Panel */}
+        <ReadingStatsPanel 
+          language={language}
+          readBookIds={readBookIds}
+          readingTimeByDate={readingTimeByDate}
+          books={books}
+        />
 
         {/* 2. THE PHYSICAL WOOD SHELF SECTION */}
         <section className="mb-14">

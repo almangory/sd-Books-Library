@@ -4,6 +4,7 @@ import LibraryShelf from "./components/LibraryShelf";
 import ThreeDFlipbook from "./components/ThreeDFlipbook";
 import SupabaseRequirements from "./components/SupabaseRequirements";
 import OnboardingTutorial from "./components/OnboardingTutorial";
+import ReadingStatsPanel from "./components/ReadingStatsPanel";
 import { LogOut, X, AlertCircle } from "lucide-react";
 import { getTranslation } from "./utils/translations";
 import { AnimatePresence } from "motion/react";
@@ -36,6 +37,58 @@ export default function App() {
     }
     return DEFAULT_BOOKS;
   });
+
+  // Reading statistics state tracking
+  const [readBookIds, setReadBookIds] = useState<string[]>(() => {
+    try {
+      const saved = localStorage.getItem("flipbook_read_book_ids");
+      return saved ? JSON.parse(saved) : [];
+    } catch (e) {
+      return [];
+    }
+  });
+
+  const [readingTimeByDate, setReadingTimeByDate] = useState<Record<string, number>>(() => {
+    try {
+      const saved = localStorage.getItem("flipbook_reading_time_by_date");
+      return saved ? JSON.parse(saved) : {};
+    } catch (e) {
+      return {};
+    }
+  });
+
+  // Track book when opened
+  useEffect(() => {
+    if (view === "reader" && selectedBook?.id) {
+      const bookId = selectedBook.id;
+      setReadBookIds(prev => {
+        if (prev.includes(bookId)) return prev;
+        const updated = [...prev, bookId];
+        localStorage.setItem("flipbook_read_book_ids", JSON.stringify(updated));
+        return updated;
+      });
+    }
+  }, [view, selectedBook?.id]);
+
+  // Track daily reading time (1 second interval when active in reader)
+  useEffect(() => {
+    if (view !== "reader" || !selectedBook?.id) return;
+
+    const interval = setInterval(() => {
+      const todayStr = new Date().toISOString().split("T")[0];
+      setReadingTimeByDate(prev => {
+        const currentSeconds = prev[todayStr] || 0;
+        const updated = {
+          ...prev,
+          [todayStr]: currentSeconds + 1
+        };
+        localStorage.setItem("flipbook_reading_time_by_date", JSON.stringify(updated));
+        return updated;
+      });
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, [view, selectedBook?.id]);
 
   // Monitor network status
   useEffect(() => {
@@ -459,6 +512,8 @@ export default function App() {
           language={currentLang}
           onChangeLanguage={(lang) => setSettings(prev => ({ ...prev, language: lang }))}
           onOpenTutorial={() => setShowOnboarding(true)}
+          readBookIds={readBookIds}
+          readingTimeByDate={readingTimeByDate}
         />
       )}
 
