@@ -210,6 +210,19 @@ export default function ThreeDFlipbook({
   useEffect(() => {
     settingsRef.current = settings;
   }, [settings]);
+
+  // Audio Context Ref to reuse single Web Audio instance
+  const audioContextRef = useRef<AudioContext | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (audioContextRef.current && audioContextRef.current.state !== "closed") {
+        audioContextRef.current.close().catch((err) => {
+          console.warn("Error closing AudioContext on unmount:", err);
+        });
+      }
+    };
+  }, []);
   
   // Audio state
   const [soundEnabled, setSoundEnabled] = useState<boolean>(true);
@@ -637,9 +650,18 @@ export default function ThreeDFlipbook({
   const playPageTurnSound = () => {
     if (!soundEnabled) return;
     try {
-      const AudioContext = window.AudioContext || (window as any).webkitAudioContext;
-      if (!AudioContext) return;
-      const ctx = new AudioContext();
+      const AudioContextClass = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioContextClass) return;
+      
+      let ctx = audioContextRef.current;
+      if (!ctx || ctx.state === "closed") {
+        ctx = new AudioContextClass();
+        audioContextRef.current = ctx;
+      }
+      
+      if (ctx.state === "suspended") {
+        ctx.resume();
+      }
       
       const duration = 0.65; // realistic human page turn speed
       const bufferSize = ctx.sampleRate * duration;

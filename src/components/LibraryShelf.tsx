@@ -1490,7 +1490,7 @@ export default function LibraryShelf({
             </span>
           </h2>
           {activeTab === "all" && searchQuery.trim() === "" ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-y-16 gap-x-6 md:gap-x-8">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-y-12 sm:gap-y-16 gap-x-4 sm:gap-x-6 md:gap-x-8">
               {/* Render the 4 main departments as physical Books on the shelf */}
               {[
                 {
@@ -1583,7 +1583,7 @@ export default function LibraryShelf({
                             <p className="font-serif font-extrabold text-xs md:text-sm text-yellow-50 leading-snug tracking-wide line-clamp-2">
                               {dept.title}
                             </p>
-                            <p className="text-[10px] text-amber-100/70 mt-1 line-clamp-2 leading-relaxed">
+                            <p className="text-[10px] text-amber-100/70 mt-1 line-clamp-2 leading-relaxed hidden sm:block">
                               {dept.description}
                             </p>
                           </div>
@@ -1618,7 +1618,7 @@ export default function LibraryShelf({
               })}
             </div>
           ) : activeTab === "curriculum" && selectedCurriculumStage === "all" && searchQuery.trim() === "" ? (
-            <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-y-16 gap-x-6 md:gap-x-8">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-y-12 sm:gap-y-16 gap-x-4 sm:gap-x-6 md:gap-x-8">
               {/* Return Card inside curriculum list */}
               <div className="flex flex-col group relative pb-10 animate-fade-in">
                 <div className="relative aspect-[3/4] w-full z-10">
@@ -1746,7 +1746,7 @@ export default function LibraryShelf({
               })}
             </div>
           ) : activeTab === "children" && selectedChildrenSection === "all" && searchQuery.trim() === "" ? (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-y-16 gap-x-6 md:gap-x-8">
+            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-y-12 sm:gap-y-16 gap-x-4 sm:gap-x-6 md:gap-x-8">
               {/* Return Card inside children list */}
               <div className="flex flex-col group relative pb-10 animate-fade-in">
                 <div className="relative aspect-[3/4] w-full z-10">
@@ -1868,7 +1868,7 @@ export default function LibraryShelf({
               <p className="text-[11px] text-[#8D7B68]/70 mt-1">انقر على أزرار الإضافة في الأعلى لملء هذا الرف!</p>
             </div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-y-16 gap-x-6 md:gap-x-8">
+            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-y-12 sm:gap-y-16 gap-x-4 sm:gap-x-6 md:gap-x-8">
               
               {/* Show Return/Back Book Card inside filtered category views */}
               {activeTab !== "all" && searchQuery.trim() === "" && (
