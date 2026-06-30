@@ -1629,6 +1629,16 @@ export default function ThreeDFlipbook({
         </header>
       )}
 
+      {/* Fallback Notice Banner */}
+      {isFallbackGenerated && (
+        <div className="bg-amber-500/10 border-b border-amber-500/20 px-4 py-3 text-center text-xs md:text-sm font-semibold text-amber-800 dark:text-amber-300 flex items-center justify-center gap-2 animate-fade-in relative z-20">
+          <span>⚠️</span>
+          <span>
+            عذراً، تعذر تحميل ملف الكتاب الأصلي من Google Drive (قد يكون الملف تالفاً، أو ليس بتنسيق PDF صالح مثل ملفات الفيديو MP4، أو يحتاج إذن مشاركة عام). تم توليد هذه النسخة التفاعلية للمعاينة وتصفح الموقع.
+          </span>
+        </div>
+      )}
+
       {/* Invisible Top Hotzone to toggle HUD in reading mode */}
       {settings.readingMode && (
         <div 
