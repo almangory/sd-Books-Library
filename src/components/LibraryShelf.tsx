@@ -27,7 +27,9 @@ import {
   Search,
   X,
   Heart,
-  ListPlus
+  ListPlus,
+  Bell,
+  BellRing
 } from "lucide-react";
 
 export const CURRICULUM_STAGES = [
@@ -335,6 +337,74 @@ export default function LibraryShelf({
 
   // Long-press detailed preview modal states
   const [previewBook, setPreviewBook] = useState<Book | null>(null);
+
+  // Notifications States
+  const [showNotifications, setShowNotifications] = useState<boolean>(false);
+  const [lastSeenNotifications, setLastSeenNotifications] = useState<number>(() => {
+    try {
+      return Number(localStorage.getItem("library_last_seen_notifications") || "0");
+    } catch (e) {
+      return 0;
+    }
+  });
+
+  const notificationsRef = React.useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const handleClickOutside = (event: MouseEvent) => {
+      if (notificationsRef.current && !notificationsRef.current.contains(event.target as Node)) {
+        setShowNotifications(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, []);
+
+  const formatRelativeTime = (timestamp: number): string => {
+    const diff = Date.now() - timestamp;
+    const secs = Math.floor(diff / 1000);
+    const mins = Math.floor(secs / 60);
+    const hours = Math.floor(mins / 60);
+    const days = Math.floor(hours / 24);
+
+    if (secs < 60) return "الآن";
+    if (mins === 1) return "منذ دقيقة";
+    if (mins === 2) return "منذ دقيقتين";
+    if (mins < 11) return `منذ ${mins} دقائق`;
+    if (mins < 60) return `منذ ${mins} دقيقة`;
+    if (hours === 1) return "منذ ساعة";
+    if (hours === 2) return "منذ ساعتين";
+    if (hours < 11) return `منذ ${hours} ساعات`;
+    if (hours < 24) return `منذ ${hours} ساعة`;
+    if (days === 1) return "أمس";
+    if (days === 2) return "منذ يومين";
+    if (days < 11) return `منذ ${days} أيام`;
+    return `منذ ${days} يوم`;
+  };
+
+  const recentBooks = [...books]
+    .sort((a, b) => (b.addedAt || 0) - (a.addedAt || 0))
+    .slice(0, 10);
+
+  const unreadCount = books.filter(b => (b.addedAt || 0) > lastSeenNotifications).length;
+
+  const toggleNotifications = () => {
+    setShowNotifications(prev => {
+      const next = !prev;
+      if (next) {
+        const now = Date.now();
+        setLastSeenNotifications(now);
+        try {
+          localStorage.setItem("library_last_seen_notifications", String(now));
+        } catch (e) {
+          console.warn(e);
+        }
+      }
+      return next;
+    });
+  };
 
   // Cached Offline Book IDs State
   const [cachedBookIds, setCachedBookIds] = useState<string[]>([]);
@@ -942,10 +1012,10 @@ export default function LibraryShelf({
           </div>
         )}
 
-        <header className="relative py-8 px-6 text-center rounded-3xl bg-gradient-to-b from-[#FAF5EC] to-[#F5F0E6] border border-[#E6E0D4] shadow-sm mb-10 overflow-hidden">
+        <header className="relative z-30 py-8 px-6 text-center rounded-3xl bg-gradient-to-b from-[#FAF5EC] to-[#F5F0E6] border border-[#E6E0D4] shadow-sm mb-10">
           {/* Nubian geometric background pattern decoration */}
-          <div className="absolute inset-0 bg-[radial-gradient(#C84B31_0.5px,transparent_0.5px)] [background-size:16px_16px] opacity-10 pointer-events-none"></div>
-          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#9E4233] via-[#5A5A40] to-[#4A3B32]"></div>
+          <div className="absolute inset-0 bg-[radial-gradient(#C84B31_0.5px,transparent_0.5px)] [background-size:16px_16px] opacity-10 pointer-events-none rounded-3xl"></div>
+          <div className="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-[#9E4233] via-[#5A5A40] to-[#4A3B32] rounded-t-3xl"></div>
 
           <div className="relative z-10 max-w-2xl mx-auto">
             <div className="inline-flex items-center gap-2 px-3 py-1.5 rounded-full bg-[#5A5A40]/10 text-[#5A5A40] text-xs font-bold mb-3 border border-[#5A5A40]/20">
@@ -1027,6 +1097,102 @@ export default function LibraryShelf({
               >
                 {isFullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
               </button>
+
+              {/* Notification Bell */}
+              <div className="relative" ref={notificationsRef}>
+                <button
+                  onClick={toggleNotifications}
+                  className={`p-2 rounded-xl border transition-all relative ${
+                    showNotifications 
+                      ? "bg-[#5A5A40] border-[#5A5A40] text-white" 
+                      : "border-[#E6E0D4] bg-white text-[#6D4C41] hover:bg-[#FAF5EC]"
+                  }`}
+                  title="الإشعارات والكتب المضافة حديثاً"
+                >
+                  <Bell className="w-4 h-4" />
+                  {unreadCount > 0 && (
+                    <span className="absolute -top-1 -right-1 flex h-4.5 w-4.5 items-center justify-center rounded-full bg-[#9E4233] text-[9px] font-bold text-white shadow-sm ring-2 ring-white animate-bounce">
+                      {unreadCount}
+                    </span>
+                  )}
+                </button>
+
+                {showNotifications && (
+                  <div className="absolute left-1/2 -translate-x-1/2 sm:left-0 sm:translate-x-0 mt-2 w-72 sm:w-80 md:w-96 rounded-2xl border border-[#E6E0D4] bg-white text-[#4A3B32] shadow-xl z-50 overflow-hidden text-right animate-fade-in">
+                    <div className="p-3.5 border-b border-[#FAF5EC] bg-[#FAF5EC] flex items-center justify-between">
+                      <span className="text-[10px] font-bold text-[#5A5A40] px-2 py-1 rounded-full bg-[#5A5A40]/10">
+                        {books.length} كتب بالمكتبة
+                      </span>
+                      <h3 className="font-bold text-xs sm:text-sm text-[#4A3B32] flex items-center gap-1.5">
+                        <BellRing className="w-3.5 h-3.5 text-[#9E4233]" />
+                        <span>آخر الكتب المضافة</span>
+                      </h3>
+                    </div>
+                    
+                    <div className="max-h-80 overflow-y-auto divide-y divide-gray-100">
+                      {recentBooks.length > 0 ? (
+                        recentBooks.map(book => {
+                          const isUnread = (book.addedAt || 0) > lastSeenNotifications;
+                          return (
+                            <div 
+                              key={book.id}
+                              onClick={() => {
+                                onSelectBook(book);
+                                setShowNotifications(false);
+                              }}
+                              className={`p-3 hover:bg-[#FAF5EC]/50 transition-all cursor-pointer flex gap-3 text-right group ${
+                                isUnread ? "bg-amber-50/40 border-r-2 border-[#9E4233]" : ""
+                              }`}
+                            >
+                              {/* Book cover thumbnail */}
+                              <div className="w-9 h-12 bg-amber-100/50 rounded-md border border-amber-200/40 flex-shrink-0 overflow-hidden shadow-sm relative group-hover:scale-105 transition-all">
+                                {book.coverUrl ? (
+                                  <img 
+                                    src={book.coverUrl} 
+                                    alt={book.title}
+                                    className="w-full h-full object-cover"
+                                    referrerPolicy="no-referrer"
+                                  />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center text-amber-800 bg-[#E6DBC4]/30 font-serif text-[9px] font-bold leading-none p-1 text-center">
+                                    كتاب
+                                  </div>
+                                )}
+                              </div>
+
+                              <div className="flex-1 min-w-0 flex flex-col justify-between text-right">
+                                <div>
+                                  <div className="flex items-start justify-between gap-2">
+                                    <span className="text-[9px] text-[#9E4233] bg-[#9E4233]/10 px-1.5 py-0.5 rounded-md whitespace-nowrap">
+                                      {book.category === "curriculum" ? "منهج دراسي" : 
+                                       book.category === "children" ? "قصص أطفال" : 
+                                       book.category === "religious" ? "ديني" : "عام"}
+                                    </span>
+                                    <h4 className="font-bold text-xs text-[#4A3B32] line-clamp-1 group-hover:text-[#9E4233] transition-colors text-right">
+                                      {book.title}
+                                    </h4>
+                                  </div>
+                                  <p className="text-[10px] text-[#6D4C41] mt-0.5 line-clamp-1 text-right">
+                                    الكاتب: {book.author || "بخت الرضا"}
+                                  </p>
+                                </div>
+                                <div className="flex items-center justify-between mt-1 text-[9px] text-[#8C8273]">
+                                  <span>{book.fileSize || "1.2 MB"}</span>
+                                  <span>{formatRelativeTime(book.addedAt || 0)}</span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })
+                      ) : (
+                        <div className="p-8 text-center text-xs text-neutral-500">
+                          لا توجد كتب مضافة في المكتبة حالياً
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                )}
+              </div>
 
               {isAdmin && (
                 <button
