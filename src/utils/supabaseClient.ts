@@ -91,16 +91,24 @@ export async function insertSupabaseBook(book: Book): Promise<Book | null> {
     }
 
     if (data) {
+      let desc = data.description || "";
+      let tags: string[] = [];
+      if (desc.includes("|||tags:")) {
+        const parts = desc.split("|||tags:");
+        desc = parts[0];
+        tags = parts[1].split(",").map((t: string) => t.trim()).filter(Boolean);
+      }
       return {
         id: String(data.id),
         title: data.title,
         author: data.author,
-        description: data.description || "",
+        description: desc,
         pdfUrl: data.pdf_url,
         coverUrl: data.cover_url || "",
         isCustom: true,
         addedAt: data.added_at ? new Date(data.added_at).getTime() : Date.now(),
         category: data.category || "general",
+        tags: tags,
       };
     }
     return null;

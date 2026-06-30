@@ -73,7 +73,9 @@ export default function App() {
               coverUrl: b.coverUrl || b.cover_url || "",
               isCustom: b.isCustom !== undefined ? b.isCustom : true,
               addedAt: b.addedAt || b.added_at || Date.now(),
-              category: b.category || "general"
+              category: b.category || "general",
+              tags: b.tags || [],
+              fileSize: b.fileSize || b.file_size || ""
             }));
 
             setBooks(prev => {
