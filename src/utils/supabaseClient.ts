@@ -28,18 +28,27 @@ export async function getSupabaseBooks(): Promise<Book[] | null> {
     }
 
     if (data) {
-      return data.map((item: any) => ({
-        id: String(item.id),
-        title: item.title,
-        author: item.author,
-        description: item.description || "",
-        pdfUrl: item.pdf_url || item.pdfUrl || "",
-        coverUrl: item.cover_url || item.coverUrl || "",
-        isCustom: item.is_custom !== undefined ? item.is_custom : true,
-        // تحويل التاريخ القادم من timestamptz إلى رقم ليطابق الفروينت إند
-        addedAt: item.added_at ? new Date(item.added_at).getTime() : Date.now(),
-        category: item.category || "general",
-      }));
+      return data.map((item: any) => {
+        let desc = item.description || "";
+        let tags: string[] = [];
+        if (desc.includes("|||tags:")) {
+          const parts = desc.split("|||tags:");
+          desc = parts[0];
+          tags = parts[1].split(",").map((t: string) => t.trim()).filter(Boolean);
+        }
+        return {
+          id: String(item.id),
+          title: item.title,
+          author: item.author,
+          description: desc,
+          pdfUrl: item.pdf_url || item.pdfUrl || "",
+          coverUrl: item.cover_url || item.coverUrl || "",
+          isCustom: item.is_custom !== undefined ? item.is_custom : true,
+          addedAt: item.added_at ? new Date(item.added_at).getTime() : Date.now(),
+          category: item.category || "general",
+          tags: tags,
+        };
+      });
     }
     return [];
   } catch (err) {
@@ -54,10 +63,11 @@ export async function getSupabaseBooks(): Promise<Book[] | null> {
 export async function insertSupabaseBook(book: Book): Promise<Book | null> {
   if (!supabase) return null;
   try {
+    const descWithTags = book.description + (book.tags && book.tags.length > 0 ? "|||tags:" + book.tags.join(",") : "");
     const insertData: any = {
       title: book.title,
       author: book.author,
-      description: book.description,
+      description: descWithTags,
       pdf_url: book.pdfUrl, // مطابق لجدولك الحالي
       category: book.category || "general",
       // الحسم هنا: تحويل الرقم إلى صيغة ISO String متوافقة تماماً مع timestamptz في سوبابيس
@@ -112,12 +122,13 @@ export async function updateSupabaseBook(book: Book): Promise<boolean> {
       return false; 
     }
 
+    const descWithTags = book.description + (book.tags && book.tags.length > 0 ? "|||tags:" + book.tags.join(",") : "");
     const { error } = await supabase
       .from("books")
       .update({
         title: book.title,
         author: book.author,
-        description: book.description,
+        description: descWithTags,
         pdf_url: book.pdfUrl,
         category: book.category || "general",
       })

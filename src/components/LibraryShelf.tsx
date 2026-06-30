@@ -30,6 +30,97 @@ import {
   ListPlus
 } from "lucide-react";
 
+export const CURRICULUM_STAGES = [
+  "الروضة الأولى",
+  "الروضة الثانية",
+  "الروضة الثالثة",
+  "الصف الأول الابتدائي",
+  "الصف الثاني الابتدائي",
+  "الصف الثالث الابتدائي",
+  "الصف الرابع الابتدائي",
+  "الصف الخامس الابتدائي",
+  "الصف السادس الابتدائي",
+  "أولى متوسط",
+  "ثاني متوسط",
+  "ثالث متوسط",
+  "الأول ثانوي",
+  "الثاني ثانوي",
+  "الثالث ثانوي"
+];
+
+export const getBookCurriculumStage = (book: Book): string | null => {
+  if (book.category !== "curriculum") return null;
+  
+  // 1. Try to find from tags
+  if (book.tags && Array.isArray(book.tags)) {
+    const found = CURRICULUM_STAGES.find(stage => 
+      book.tags?.some(tag => tag.trim() === stage)
+    );
+    if (found) return found;
+  }
+  
+  // 2. Try to find from title
+  const foundInTitle = CURRICULUM_STAGES.find(stage => 
+    book.title.includes(stage)
+  );
+  if (foundInTitle) return foundInTitle;
+
+  // 3. Try to find from description
+  const foundInDesc = CURRICULUM_STAGES.find(stage => 
+    book.description && book.description.includes(stage)
+  );
+  if (foundInDesc) return foundInDesc;
+
+  return null;
+};
+
+export const CHILDREN_SECTIONS = [
+  "انجليزي",
+  "عربي",
+  "باللهجة السودانية"
+];
+
+export const getBookChildrenSection = (book: Book): string | null => {
+  if (book.category !== "children") return null;
+
+  // 1. Try to find from tags
+  if (book.tags && Array.isArray(book.tags)) {
+    const found = CHILDREN_SECTIONS.find(sec => 
+      book.tags?.some(tag => tag.trim() === sec)
+    );
+    if (found) return found;
+  }
+
+  // 2. Try to find from title
+  const titleLower = book.title.toLowerCase();
+  if (titleLower.includes("سوداني") || titleLower.includes("سودانية") || titleLower.includes("السودان") || titleLower.includes("سودان")) {
+    return "باللهجة السودانية";
+  }
+  if (titleLower.includes("انجليزي") || titleLower.includes("english") || titleLower.includes("إنجليزي") || titleLower.includes("انقليزي") || titleLower.includes("eng")) {
+    return "انجليزي";
+  }
+  if (titleLower.includes("عربي") || titleLower.includes("العربية") || titleLower.includes("عربية")) {
+    return "عربي";
+  }
+
+  // 3. Try to find from description
+  if (book.description) {
+    const descLower = book.description.toLowerCase();
+    if (descLower.includes("سوداني") || descLower.includes("سودانية") || descLower.includes("السودان") || descLower.includes("سودان")) {
+      return "باللهجة السودانية";
+    }
+    if (descLower.includes("انجليزي") || descLower.includes("english") || descLower.includes("إنجليزي") || descLower.includes("انقليزي") || descLower.includes("eng")) {
+      return "انجليزي";
+    }
+    if (descLower.includes("عربي") || descLower.includes("العربية") || descLower.includes("عربية")) {
+      return "عربي";
+    }
+  }
+
+  // Default fallback for children books if nothing specified can be "عربي"
+  return "عربي";
+};
+
 interface LibraryShelfProps {
   books: Book[];
   onSelectBook: (book: Book) => void;
@@ -220,6 +311,18 @@ export default function LibraryShelf({
   const [sortBy, setSortBy] = useState<"date" | "alphabet">("date");
   const [selectedTag, setSelectedTag] = useState<string>("all");
   const [searchQuery, setSearchQuery] = useState<string>("");
+  
+  // Curriculum Stage States
+  const [selectedCurriculumStage, setSelectedCurriculumStage] = useState<string>("all");
+  const [newCurriculumStage, setNewCurriculumStage] = useState<string>("");
+  const [uploadCurriculumStage, setUploadCurriculumStage] = useState<string>("");
+  const [editCurriculumStage, setEditCurriculumStage] = useState<string>("");
+
+  // Children Section States
+  const [selectedChildrenSection, setSelectedChildrenSection] = useState<string>("all");
+  const [newChildrenSection, setNewChildrenSection] = useState<string>("");
+  const [uploadChildrenSection, setUploadChildrenSection] = useState<string>("");
+  const [editChildrenSection, setEditChildrenSection] = useState<string>("");
 
   // Comma-separated tag input string states for modals
   const [newTagsStr, setNewTagsStr] = useState<string>("");
@@ -355,6 +458,12 @@ export default function LibraryShelf({
     return Array.from(tagsSet);
   }, [books]);
 
+  // Reset curriculum stage when tab switches
+  useEffect(() => {
+    setSelectedCurriculumStage("all");
+    setSelectedChildrenSection("all");
+  }, [activeTab]);
+
   // Combined sorted and filtered books selector
   const sortedAndFilteredBooks = React.useMemo(() => {
     // 1. Filter by category tab
@@ -371,6 +480,16 @@ export default function LibraryShelf({
       if (activeList) {
         list = list.filter(book => activeList.bookIds.includes(book.id));
       }
+    }
+
+    // 1.8. Filter by curriculum stage
+    if (activeTab === "curriculum" && selectedCurriculumStage !== "all") {
+      list = list.filter(book => getBookCurriculumStage(book) === selectedCurriculumStage);
+    }
+
+    // 1.9. Filter by children section
+    if (activeTab === "children" && selectedChildrenSection !== "all") {
+      list = list.filter(book => getBookChildrenSection(book) === selectedChildrenSection);
     }
 
     // 2. Filter by selected tag/group
@@ -402,7 +521,7 @@ export default function LibraryShelf({
         return (b.addedAt || 0) - (a.addedAt || 0);
       }
     });
-  }, [books, activeTab, selectedTag, sortBy, searchQuery, favorites, activeReadingListId, readingLists]);
+  }, [books, activeTab, selectedTag, selectedCurriculumStage, selectedChildrenSection, sortBy, searchQuery, favorites, activeReadingListId, readingLists]);
 
   // Help tips toggler
   const [showHelp, setShowHelp] = useState<boolean>(false);
@@ -430,6 +549,18 @@ export default function LibraryShelf({
       .map(t => t.trim())
       .filter(t => t.length > 0);
 
+    if (newCategory === "curriculum" && newCurriculumStage) {
+      if (!parsedTags.includes(newCurriculumStage)) {
+        parsedTags.push(newCurriculumStage);
+      }
+    }
+
+    if (newCategory === "children" && newChildrenSection) {
+      if (!parsedTags.includes(newChildrenSection)) {
+        parsedTags.push(newChildrenSection);
+      }
+    }
+
     const customBook: Book = {
       id: "drive_" + Math.random().toString(36).substr(2, 9),
       title: newTitle.trim(),
@@ -452,6 +583,8 @@ export default function LibraryShelf({
     setNewDesc("");
     setNewCategory("general");
     setNewTagsStr("");
+    setNewCurriculumStage("");
+    setNewChildrenSection("");
     setShowAddModal(false);
   };
 
@@ -494,6 +627,18 @@ export default function LibraryShelf({
         .map(t => t.trim())
         .filter(t => t.length > 0);
 
+      if (uploadCategory === "curriculum" && uploadCurriculumStage) {
+        if (!parsedTags.includes(uploadCurriculumStage)) {
+          parsedTags.push(uploadCurriculumStage);
+        }
+      }
+
+      if (uploadCategory === "children" && uploadChildrenSection) {
+        if (!parsedTags.includes(uploadChildrenSection)) {
+          parsedTags.push(uploadChildrenSection);
+        }
+      }
+
       const localBook: Book = {
         id: bookId,
         title: uploadTitle.trim(),
@@ -516,6 +661,8 @@ export default function LibraryShelf({
       setUploadDesc("");
       setUploadCategory("general");
       setUploadTagsStr("");
+      setUploadCurriculumStage("");
+      setUploadChildrenSection("");
       setUploadFile(null);
       setShowUploadModal(false);
     } catch (err: any) {
@@ -572,6 +719,10 @@ export default function LibraryShelf({
       
       setEditDesc(book.description || "");
       setEditCategory(book.category || "general");
+      const currentStage = getBookCurriculumStage(book) || "";
+      setEditCurriculumStage(currentStage);
+      const currentSection = getBookChildrenSection(book) || "";
+      setEditChildrenSection(currentSection);
       setEditTagsStr(book.tags && Array.isArray(book.tags) ? book.tags.join("، ") : "");
       setShowEditModal(true);
     });
@@ -599,6 +750,19 @@ export default function LibraryShelf({
       .map(t => t.trim())
       .filter(t => t.length > 0);
 
+    const cleanedTags = parsedTags.filter(tag => !CURRICULUM_STAGES.includes(tag) && !CHILDREN_SECTIONS.includes(tag));
+    if (editCategory === "curriculum" && editCurriculumStage) {
+      if (!cleanedTags.includes(editCurriculumStage)) {
+        cleanedTags.push(editCurriculumStage);
+      }
+    }
+
+    if (editCategory === "children" && editChildrenSection) {
+      if (!cleanedTags.includes(editChildrenSection)) {
+        cleanedTags.push(editChildrenSection);
+      }
+    }
+
     const updatedBook: Book = {
       ...editingBook,
       title: editTitle.trim(),
@@ -606,7 +770,7 @@ export default function LibraryShelf({
       pdfUrl: parsedDirectUrl,
       description: editDesc.trim(),
       category: editCategory,
-      tags: parsedTags
+      tags: cleanedTags
     };
 
     onUpdateBook(updatedBook);
@@ -618,6 +782,8 @@ export default function LibraryShelf({
     setEditAuthor("");
     setEditUrl("");
     setEditDesc("");
+    setEditCurriculumStage("");
+    setEditChildrenSection("");
     setEditCategory("general");
     setEditTagsStr("");
     setErrorMsg(null);
@@ -1142,15 +1308,23 @@ export default function LibraryShelf({
             <BookOpen className="w-5.5 h-5.5 text-[#9E4233]" />
             <span>
               {activeTab === "all" && "رفوف القراءة الخاصة بك"}
-              {activeTab === "curriculum" && "مناهج وزارة التربية والتعليم"}
-              {activeTab === "children" && "كتب للأطفال والبراعم"}
+              {activeTab === "curriculum" && (
+                selectedCurriculumStage === "all"
+                  ? "مناهج وزارة التربية والتعليم"
+                  : `مناهج وزارة التربية والتعليم • ${selectedCurriculumStage}`
+              )}
+              {activeTab === "children" && (
+                selectedChildrenSection === "all"
+                  ? "كتب للأطفال والبراعم"
+                  : `كتب للأطفال والبراعم • قصص ${selectedChildrenSection}`
+              )}
               {activeTab === "religious" && "المكتبة الإسلامية والدينية"}
               {activeTab === "general" && "الكتب العامة والروايات الأدبية"}
               {selectedTag !== "all" && ` • مجموعة (${selectedTag})`}
             </span>
           </h2>
           {activeTab === "all" && searchQuery.trim() === "" ? (
-            <div className="grid grid-cols-2 sm:grid-cols-2 md:grid-cols-4 gap-y-16 gap-x-6 md:gap-x-8">
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-y-16 gap-x-6 md:gap-x-8">
               {/* Render the 4 main departments as physical Books on the shelf */}
               {[
                 {
@@ -1277,6 +1451,250 @@ export default function LibraryShelf({
                 );
               })}
             </div>
+          ) : activeTab === "curriculum" && selectedCurriculumStage === "all" && searchQuery.trim() === "" ? (
+            <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-y-16 gap-x-6 md:gap-x-8">
+              {/* Return Card inside curriculum list */}
+              <div className="flex flex-col group relative pb-10 animate-fade-in">
+                <div className="relative aspect-[3/4] w-full z-10">
+                  <div 
+                    onClick={() => {
+                      setActiveTab("all");
+                      setSelectedTag("all");
+                    }}
+                    className="cursor-pointer absolute inset-0 rounded-r-xl rounded-l-md shadow-lg hover:shadow-2xl transition-all duration-300 transform preserve-3d overflow-hidden flex flex-col justify-between p-4 border-r border-[#ffffff30] z-10 origin-bottom -rotate-3 hover:rotate-0 hover:scale-105 hover:-translate-y-3 bg-gradient-to-br from-[#735F53] to-[#45372E] text-white border-2 border-[#FAF5EC]/20"
+                  >
+                    <div className="absolute inset-0 bg-[#4A3B32]/10 z-0"></div>
+                    <div className="absolute inset-2 border border-dashed border-white/20 rounded-md z-0 pointer-events-none"></div>
+                    <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-r from-black/55 to-transparent z-10"></div>
+                    
+                    <div className="relative z-10 flex-1 flex flex-col justify-between h-full">
+                      <div className="py-1 px-1.5 rounded-md text-center bg-white/20 text-[9px] font-extrabold tracking-wider text-amber-100 truncate">
+                        الأقسام الرئيسية
+                      </div>
+                      
+                      <div className="my-auto text-center py-2 px-1 flex flex-col items-center">
+                        <span className="text-3xl animate-bounce">↩</span>
+                        <p className="font-serif font-extrabold text-xs md:text-sm text-yellow-50 leading-snug mt-2">
+                          الرجوع للرف الرئيسي
+                        </p>
+                        <p className="text-[9px] text-amber-200/80 mt-1 leading-normal">
+                          تصفح باقي الأقسام
+                        </p>
+                      </div>
+                      
+                      <div className="mx-auto mt-2 text-center">
+                        <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center bg-black/10 text-amber-300/60">
+                          <span className="text-[10px]">۞</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Wooden Shelf */}
+                  <div className="absolute bottom-[-14px] left-[-12px] right-[-12px] md:left-[-16px] md:right-[-16px] h-6 bg-gradient-to-b from-[#A05C3F] via-[#7B3F27] to-[#4A2010] rounded-sm shadow-[0_12px_18px_rgba(0,0,0,0.55),0_3px_5px_rgba(0,0,0,0.25)] z-0 border-b border-black/50">
+                    <div className="absolute top-0 left-0 right-0 h-[4px] bg-[#C18260] opacity-80 border-b border-black/25"></div>
+                  </div>
+                </div>
+                
+                <div className="mt-8 text-right z-10 px-1">
+                  <h3 className="font-bold text-xs text-[#6D4C41]">رجوع للرف الرئيسي</h3>
+                  <p className="text-[10px] opacity-75">تصفح الرفوف والأقسام الأخرى</p>
+                </div>
+              </div>
+
+              {[
+                { id: "الروضة الأولى", title: "الروضة الأولى", level: "مرحلة الرياض", icon: "🧸", bg: "from-[#FF8D80] to-[#E53935]" },
+                { id: "الروضة الثانية", title: "الروضة الثانية", level: "مرحلة الرياض", icon: "🎨", bg: "from-[#FFA726] to-[#FB8C00]" },
+                { id: "الروضة الثالثة", title: "الروضة الثالثة", level: "التمهيدي", icon: "✏️", bg: "from-[#FFEE58] to-[#FDD835]" },
+                { id: "الصف الأول الابتدائي", title: "الصف الأول الابتدائي", level: "الابتدائي", icon: "🎒", bg: "from-[#66BB6A] to-[#43A047]" },
+                { id: "الصف الثاني الابتدائي", title: "الصف الثاني الابتدائي", level: "الابتدائي", icon: "📖", bg: "from-[#4CAF50] to-[#2E7D32]" },
+                { id: "الصف الثالث الابتدائي", title: "الصف الثالث الابتدائي", level: "الابتدائي", icon: "📝", bg: "from-[#26A69A] to-[#00897B]" },
+                { id: "الصف الرابع الابتدائي", title: "الصف الرابع الابتدائي", level: "الابتدائي", icon: "📐", bg: "from-[#26C6DA] to-[#00ACC1]" },
+                { id: "الصف الخامس الابتدائي", title: "الصف الخامس الابتدائي", level: "الابتدائي", icon: "🎨", bg: "from-[#42A5F5] to-[#1E88E5]" },
+                { id: "الصف السادس الابتدائي", title: "الصف السادس الابتدائي", level: "الابتدائي", icon: "🧬", bg: "from-[#5C6BC0] to-[#3949AB]" },
+                { id: "أولى متوسط", title: "أولى متوسط", level: "المتوسط", icon: "🧠", bg: "from-[#7E57C2] to-[#5E35B1]" },
+                { id: "ثاني متوسط", title: "ثاني متوسط", level: "المتوسط", icon: "📐", bg: "from-[#AB47BC] to-[#8E24AA]" },
+                { id: "ثالث متوسط", title: "ثالث متوسط", level: "المتوسط", icon: "🔬", bg: "from-[#EC407A] to-[#D81B60]" },
+                { id: "الأول ثانوي", title: "الأول ثانوي", level: "الثانوي", icon: "📐", bg: "from-[#8D6E63] to-[#5D4037]" },
+                { id: "الثاني ثانوي", title: "الثاني ثانوي", level: "الثانوي", icon: "🧪", bg: "from-[#78909C] to-[#546E7A]" },
+                { id: "الثالث ثانوي", title: "الثالث ثانوي", level: "الثانوي", icon: "🔬", bg: "from-[#3E2723] to-[#271510]" }
+              ].map((stage, sIdx) => {
+                const count = books.filter(b => b.category === "curriculum" && getBookCurriculumStage(b) === stage.id).length;
+                let leaningClass = "";
+                if (sIdx % 3 === 0) {
+                  leaningClass = "origin-bottom -rotate-3 hover:rotate-0 hover:scale-105 hover:-translate-y-3";
+                } else if (sIdx % 3 === 1) {
+                  leaningClass = "origin-bottom rotate-3 hover:rotate-0 hover:scale-105 hover:-translate-y-3";
+                } else {
+                  leaningClass = "origin-bottom rotate-1 hover:rotate-0 hover:scale-105 hover:-translate-y-3";
+                }
+
+                return (
+                  <div key={stage.id} className="flex flex-col group relative pb-10 animate-fade-in">
+                    <div className="relative aspect-[3/4] w-full z-10">
+                      <div 
+                        onClick={() => {
+                          setSelectedCurriculumStage(stage.id);
+                        }}
+                        className={`cursor-pointer absolute inset-0 rounded-r-xl rounded-l-md shadow-lg hover:shadow-2xl transition-all duration-300 transform preserve-3d overflow-hidden flex flex-col justify-between p-4 border-r border-[#ffffff30] z-10 ${leaningClass}`}
+                      >
+                        <div className={`absolute inset-0 bg-gradient-to-br ${stage.bg} z-0`}></div>
+                        <div className="absolute inset-2 border border-dashed border-white/20 rounded-md z-0 pointer-events-none"></div>
+                        <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-r from-black/55 to-transparent z-10"></div>
+                        <div className="absolute left-[2px] top-0 bottom-0 w-[0.5px] bg-white/25 z-10"></div>
+
+                        <div className="relative z-10 flex-1 flex flex-col justify-between h-full">
+                          <div className="py-1 px-1.5 rounded bg-white/20 text-[9px] font-extrabold text-white text-center truncate shadow-xs">
+                            {stage.level}
+                          </div>
+
+                          <div className="my-auto text-center py-2 px-1">
+                            <span className="text-3xl filter drop-shadow mb-2 block">{stage.icon}</span>
+                            <p className="font-serif font-extrabold text-xs md:text-sm text-white leading-snug tracking-wide line-clamp-2">
+                              {stage.title}
+                            </p>
+                          </div>
+
+                          <div className="mx-auto mt-2 text-center">
+                            <span className="inline-block px-2.5 py-0.5 bg-black/30 rounded-full border border-white/10 text-[9px] font-bold text-amber-200">
+                              📚 {count} كتب
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-gradient-to-l from-white/30 to-transparent z-10"></div>
+                      </div>
+
+                      {/* Wooden Shelf */}
+                      <div className="absolute bottom-[-14px] left-[-12px] right-[-12px] md:left-[-16px] md:right-[-16px] h-6 bg-gradient-to-b from-[#A05C3F] via-[#7B3F27] to-[#4A2010] rounded-sm shadow-[0_12px_18px_rgba(0,0,0,0.55),0_3px_5px_rgba(0,0,0,0.25)] z-0 border-b border-black/50">
+                        <div className="absolute top-0 left-0 right-0 h-[4px] bg-[#C18260] opacity-80 border-b border-black/25"></div>
+                      </div>
+                    </div>
+
+                    <div className="mt-8 text-right z-10 px-1">
+                      <h3 className="font-bold text-xs text-[#4A3B32] line-clamp-1">{stage.title}</h3>
+                      <p className="text-[10px] opacity-75 line-clamp-1 mt-0.5">اضغط لتصفح كتب هذا القسم</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          ) : activeTab === "children" && selectedChildrenSection === "all" && searchQuery.trim() === "" ? (
+            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-y-16 gap-x-6 md:gap-x-8">
+              {/* Return Card inside children list */}
+              <div className="flex flex-col group relative pb-10 animate-fade-in">
+                <div className="relative aspect-[3/4] w-full z-10">
+                  <div 
+                    onClick={() => {
+                      setActiveTab("all");
+                      setSelectedTag("all");
+                    }}
+                    className="cursor-pointer absolute inset-0 rounded-r-xl rounded-l-md shadow-lg hover:shadow-2xl transition-all duration-300 transform preserve-3d overflow-hidden flex flex-col justify-between p-4 border-r border-[#ffffff30] z-10 origin-bottom -rotate-3 hover:rotate-0 hover:scale-105 hover:-translate-y-3 bg-gradient-to-br from-[#735F53] to-[#45372E] text-white border-2 border-[#FAF5EC]/20"
+                  >
+                    <div className="absolute inset-0 bg-[#4A3B32]/10 z-0"></div>
+                    <div className="absolute inset-2 border border-dashed border-white/20 rounded-md z-0 pointer-events-none"></div>
+                    <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-r from-black/55 to-transparent z-10"></div>
+                    
+                    <div className="relative z-10 flex-1 flex flex-col justify-between h-full">
+                      <div className="py-1 px-1.5 rounded-md text-center bg-white/20 text-[9px] font-extrabold tracking-wider text-amber-100 truncate">
+                        الأقسام الرئيسية
+                      </div>
+                      
+                      <div className="my-auto text-center py-2 px-1 flex flex-col items-center">
+                        <span className="text-3xl animate-bounce">↩</span>
+                        <p className="font-serif font-extrabold text-xs md:text-sm text-yellow-50 leading-snug mt-2">
+                          الرجوع للرف الرئيسي
+                        </p>
+                        <p className="text-[9px] text-amber-200/80 mt-1 leading-normal">
+                          تصفح باقي الأقسام
+                        </p>
+                      </div>
+                      
+                      <div className="mx-auto mt-2 text-center">
+                        <div className="w-6 h-6 rounded-full border border-white/20 flex items-center justify-center bg-black/10 text-amber-300/60">
+                          <span className="text-[10px]">۞</span>
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                  
+                  {/* Wooden Shelf */}
+                  <div className="absolute bottom-[-14px] left-[-12px] right-[-12px] md:left-[-16px] md:right-[-16px] h-6 bg-gradient-to-b from-[#A05C3F] via-[#7B3F27] to-[#4A2010] rounded-sm shadow-[0_12px_18px_rgba(0,0,0,0.55),0_3px_5px_rgba(0,0,0,0.25)] z-0 border-b border-black/50">
+                    <div className="absolute top-0 left-0 right-0 h-[4px] bg-[#C18260] opacity-80 border-b border-black/25"></div>
+                  </div>
+                </div>
+                
+                <div className="mt-8 text-right z-10 px-1">
+                  <h3 className="font-bold text-xs text-[#6D4C41]">رجوع للرف الرئيسي</h3>
+                  <p className="text-[10px] opacity-75">تصفح الرفوف والأقسام الأخرى</p>
+                </div>
+              </div>
+
+              {[
+                { id: "عربي", title: "قصص باللغة العربية", level: "عربي", icon: "🦁", bg: "from-amber-500 to-amber-700" },
+                { id: "انجليزي", title: "قصص باللغة الإنجليزية", level: "English", icon: "🧸", bg: "from-indigo-500 to-indigo-700" },
+                { id: "باللهجة السودانية", title: "حكايات باللهجة السودانية", level: "سوداني", icon: "🇸🇩", bg: "from-emerald-600 to-emerald-800" }
+              ].map((stage, sIdx) => {
+                const count = books.filter(b => b.category === "children" && getBookChildrenSection(b) === stage.id).length;
+                let leaningClass = "";
+                if (sIdx % 3 === 0) {
+                  leaningClass = "origin-bottom -rotate-3 hover:rotate-0 hover:scale-105 hover:-translate-y-3";
+                } else if (sIdx % 3 === 1) {
+                  leaningClass = "origin-bottom rotate-3 hover:rotate-0 hover:scale-105 hover:-translate-y-3";
+                } else {
+                  leaningClass = "origin-bottom rotate-1 hover:rotate-0 hover:scale-105 hover:-translate-y-3";
+                }
+
+                return (
+                  <div key={stage.id} className="flex flex-col group relative pb-10 animate-fade-in">
+                    <div className="relative aspect-[3/4] w-full z-10">
+                      <div 
+                        onClick={() => {
+                          setSelectedChildrenSection(stage.id);
+                        }}
+                        className={`cursor-pointer absolute inset-0 rounded-r-xl rounded-l-md shadow-lg hover:shadow-2xl transition-all duration-300 transform preserve-3d overflow-hidden flex flex-col justify-between p-4 border-r border-[#ffffff30] z-10 ${leaningClass}`}
+                      >
+                        <div className={`absolute inset-0 bg-gradient-to-br ${stage.bg} z-0`}></div>
+                        <div className="absolute inset-2 border border-dashed border-white/20 rounded-md z-0 pointer-events-none"></div>
+                        <div className="absolute left-0 top-0 bottom-0 w-3 bg-gradient-to-r from-black/55 to-transparent z-10"></div>
+                        <div className="absolute left-[2px] top-0 bottom-0 w-[0.5px] bg-white/25 z-10"></div>
+
+                        <div className="relative z-10 flex-1 flex flex-col justify-between h-full">
+                          <div className="py-1 px-1.5 rounded bg-white/20 text-[9px] font-extrabold text-white text-center truncate shadow-xs">
+                            {stage.level}
+                          </div>
+
+                          <div className="my-auto text-center py-2 px-1">
+                            <span className="text-3xl filter drop-shadow mb-2 block">{stage.icon}</span>
+                            <p className="font-serif font-extrabold text-xs md:text-sm text-white leading-snug tracking-wide line-clamp-2">
+                              {stage.title}
+                            </p>
+                          </div>
+
+                          <div className="mx-auto mt-2 text-center">
+                            <span className="inline-block px-2.5 py-0.5 bg-black/30 rounded-full border border-white/10 text-[9px] font-bold text-amber-200">
+                              📚 {count} كتب
+                            </span>
+                          </div>
+                        </div>
+
+                        <div className="absolute right-0 top-0 bottom-0 w-0.5 bg-gradient-to-l from-white/30 to-transparent z-10"></div>
+                      </div>
+
+                      {/* Wooden Shelf */}
+                      <div className="absolute bottom-[-14px] left-[-12px] right-[-12px] md:left-[-16px] md:right-[-16px] h-6 bg-gradient-to-b from-[#A05C3F] via-[#7B3F27] to-[#4A2010] rounded-sm shadow-[0_12px_18px_rgba(0,0,0,0.55),0_3px_5px_rgba(0,0,0,0.25)] z-0 border-b border-black/50">
+                        <div className="absolute top-0 left-0 right-0 h-[4px] bg-[#C18260] opacity-80 border-b border-black/25"></div>
+                      </div>
+                    </div>
+
+                    <div className="mt-8 text-right z-10 px-1">
+                      <h3 className="font-bold text-xs text-[#4A3B32] line-clamp-1">{stage.title}</h3>
+                      <p className="text-[10px] opacity-75 line-clamp-1 mt-0.5">اضغط لتصفح كتب هذا القسم</p>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
           ) : sortedAndFilteredBooks.length === 0 ? (
             <div className="text-center py-16 px-4 bg-[#FAF5EC]/40 rounded-3xl border border-[#E6E0D4] border-dashed">
               <span className="text-3xl">📭</span>
@@ -1284,7 +1702,7 @@ export default function LibraryShelf({
               <p className="text-[11px] text-[#8D7B68]/70 mt-1">انقر على أزرار الإضافة في الأعلى لملء هذا الرف!</p>
             </div>
           ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-y-16 gap-x-6 md:gap-x-8">
+            <div className="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 gap-y-16 gap-x-6 md:gap-x-8">
               
               {/* Show Return/Back Book Card inside filtered category views */}
               {activeTab !== "all" && searchQuery.trim() === "" && (
@@ -1292,8 +1710,14 @@ export default function LibraryShelf({
                   <div className="relative aspect-[3/4] w-full z-10">
                     <div 
                       onClick={() => {
-                        setActiveTab("all");
-                        setSelectedTag("all");
+                        if (activeTab === "curriculum" && selectedCurriculumStage !== "all") {
+                          setSelectedCurriculumStage("all");
+                        } else if (activeTab === "children" && selectedChildrenSection !== "all") {
+                          setSelectedChildrenSection("all");
+                        } else {
+                          setActiveTab("all");
+                          setSelectedTag("all");
+                        }
                       }}
                       className="cursor-pointer absolute inset-0 rounded-r-xl rounded-l-md shadow-lg hover:shadow-2xl transition-all duration-300 transform preserve-3d overflow-hidden flex flex-col justify-between p-4 border-r border-[#ffffff30] z-10 origin-bottom -rotate-3 hover:rotate-0 hover:scale-105 hover:-translate-y-3 bg-gradient-to-br from-[#735F53] to-[#45372E] text-white border-2 border-[#FAF5EC]/20"
                     >
@@ -1303,16 +1727,28 @@ export default function LibraryShelf({
                       
                       <div className="relative z-10 flex-1 flex flex-col justify-between h-full">
                         <div className="py-1 px-1.5 rounded-md text-center bg-white/20 text-[9px] font-extrabold tracking-wider text-amber-100 truncate">
-                          رفوف الأقسام الرئيسية
+                          {activeTab === "curriculum" && selectedCurriculumStage !== "all" 
+                            ? "مناهج وزارة التربية" 
+                            : activeTab === "children" && selectedChildrenSection !== "all"
+                            ? "قصص وحكايات الأطفال"
+                            : "رفوف الأقسام الرئيسية"}
                         </div>
                         
                         <div className="my-auto text-center py-2 px-1 flex flex-col items-center">
                           <span className="text-3xl animate-bounce">↩</span>
                           <p className="font-serif font-extrabold text-xs md:text-sm text-yellow-50 leading-snug mt-2">
-                            الرجوع للرف الرئيسي
+                            {activeTab === "curriculum" && selectedCurriculumStage !== "all" 
+                              ? "الرجوع للمراحل الدراسية" 
+                              : activeTab === "children" && selectedChildrenSection !== "all"
+                              ? "الرجوع لأقسام الأطفال"
+                              : "الرجوع للرف الرئيسي"}
                           </p>
                           <p className="text-[9px] text-amber-200/80 mt-1 leading-normal">
-                            تصفح باقي التصنيفات
+                            {activeTab === "curriculum" && selectedCurriculumStage !== "all" 
+                              ? "تصفح باقي الصفوف والمراحل" 
+                              : activeTab === "children" && selectedChildrenSection !== "all"
+                              ? "تصفح باقي تصنيفات حكايات الأطفال"
+                              : "تصفح باقي التصنيفات"}
                           </p>
                         </div>
                         
@@ -1331,8 +1767,20 @@ export default function LibraryShelf({
                   </div>
                   
                   <div className="mt-8 text-right z-10 px-1">
-                    <h3 className="font-bold text-xs text-[#6D4C41]">رجوع للرف الرئيسي</h3>
-                    <p className="text-[10px] opacity-75">تصفح الرفوف والأقسام الأخرى</p>
+                    <h3 className="font-bold text-xs text-[#6D4C41]">
+                      {activeTab === "curriculum" && selectedCurriculumStage !== "all" 
+                        ? "رجوع للمراحل الدراسية" 
+                        : activeTab === "children" && selectedChildrenSection !== "all"
+                        ? "رجوع لأقسام الأطفال"
+                        : "رجوع للرف الرئيسي"}
+                    </h3>
+                    <p className="text-[10px] opacity-75">
+                      {activeTab === "curriculum" && selectedCurriculumStage !== "all" 
+                        ? "تصفح الصفوف والمراحل التعليمية" 
+                        : activeTab === "children" && selectedChildrenSection !== "all"
+                        ? "تصفح تصنيفات قصص الأطفال"
+                        : "تصفح الرفوف والأقسام الأخرى"}
+                    </p>
                   </div>
                 </div>
               )}
@@ -1672,6 +2120,38 @@ export default function LibraryShelf({
                 </select>
               </div>
 
+              {newCategory === "curriculum" && (
+                <div className="animate-fade-in">
+                  <label className="block text-xs font-bold text-emerald-800 mb-1.5">الصف أو المرحلة الدراسية</label>
+                  <select 
+                    value={newCurriculumStage}
+                    onChange={(e) => setNewCurriculumStage(e.target.value)}
+                    className="w-full p-2.5 text-xs rounded-xl border border-emerald-300 focus:ring-1 focus:ring-emerald-500 outline-none bg-emerald-50/50 text-[#4A3B32] font-semibold"
+                  >
+                    <option value="">-- اختر المرحلة / الصف الدراسي --</option>
+                    {CURRICULUM_STAGES.map(stage => (
+                      <option key={stage} value={stage}>{stage}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {newCategory === "children" && (
+                <div className="animate-fade-in">
+                  <label className="block text-xs font-bold text-rose-800 mb-1.5">قسم الأطفال الفرعي</label>
+                  <select 
+                    value={newChildrenSection}
+                    onChange={(e) => setNewChildrenSection(e.target.value)}
+                    className="w-full p-2.5 text-xs rounded-xl border border-rose-300 focus:ring-1 focus:ring-rose-500 outline-none bg-rose-50/50 text-[#4A3B32] font-semibold"
+                  >
+                    <option value="">-- اختر القسم الفرعي --</option>
+                    {CHILDREN_SECTIONS.map(sec => (
+                      <option key={sec} value={sec}>{sec}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
               <div>
                 <label className="block text-xs font-bold text-[#4A3B32] mb-1.5">نبذة مختصرة عن الكتاب (اختياري)</label>
                 <textarea 
@@ -1778,6 +2258,38 @@ export default function LibraryShelf({
                   <option value="religious">المكتبة الدينية</option>
                 </select>
               </div>
+
+              {editCategory === "curriculum" && (
+                <div className="animate-fade-in">
+                  <label className="block text-xs font-bold text-emerald-800 mb-1.5">الصف أو المرحلة الدراسية</label>
+                  <select 
+                    value={editCurriculumStage}
+                    onChange={(e) => setEditCurriculumStage(e.target.value)}
+                    className="w-full p-2.5 text-xs rounded-xl border border-emerald-300 focus:ring-1 focus:ring-emerald-500 outline-none bg-emerald-50/50 text-[#4A3B32] font-semibold"
+                  >
+                    <option value="">-- اختر المرحلة / الصف الدراسي --</option>
+                    {CURRICULUM_STAGES.map(stage => (
+                      <option key={stage} value={stage}>{stage}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {editCategory === "children" && (
+                <div className="animate-fade-in">
+                  <label className="block text-xs font-bold text-rose-800 mb-1.5">قسم الأطفال الفرعي</label>
+                  <select 
+                    value={editChildrenSection}
+                    onChange={(e) => setEditChildrenSection(e.target.value)}
+                    className="w-full p-2.5 text-xs rounded-xl border border-rose-300 focus:ring-1 focus:ring-rose-500 outline-none bg-rose-50/50 text-[#4A3B32] font-semibold"
+                  >
+                    <option value="">-- اختر القسم الفرعي --</option>
+                    {CHILDREN_SECTIONS.map(sec => (
+                      <option key={sec} value={sec}>{sec}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-bold text-[#4A3B32] mb-1.5">نبذة مختصرة عن الكتاب (اختياري)</label>
@@ -1922,6 +2434,38 @@ export default function LibraryShelf({
                   <option value="religious">المكتبة الدينية</option>
                 </select>
               </div>
+
+              {uploadCategory === "curriculum" && (
+                <div className="animate-fade-in">
+                  <label className="block text-xs font-bold text-emerald-800 mb-1.5">الصف أو المرحلة الدراسية</label>
+                  <select 
+                    value={uploadCurriculumStage}
+                    onChange={(e) => setUploadCurriculumStage(e.target.value)}
+                    className="w-full p-2.5 text-xs rounded-xl border border-emerald-300 focus:ring-1 focus:ring-emerald-500 outline-none bg-emerald-50/50 text-[#4A3B32] font-semibold"
+                  >
+                    <option value="">-- اختر المرحلة / الصف الدراسي --</option>
+                    {CURRICULUM_STAGES.map(stage => (
+                      <option key={stage} value={stage}>{stage}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {uploadCategory === "children" && (
+                <div className="animate-fade-in">
+                  <label className="block text-xs font-bold text-rose-800 mb-1.5">قسم الأطفال الفرعي</label>
+                  <select 
+                    value={uploadChildrenSection}
+                    onChange={(e) => setUploadChildrenSection(e.target.value)}
+                    className="w-full p-2.5 text-xs rounded-xl border border-rose-300 focus:ring-1 focus:ring-rose-500 outline-none bg-rose-50/50 text-[#4A3B32] font-semibold"
+                  >
+                    <option value="">-- اختر القسم الفرعي --</option>
+                    {CHILDREN_SECTIONS.map(sec => (
+                      <option key={sec} value={sec}>{sec}</option>
+                    ))}
+                  </select>
+                </div>
+              )}
 
               <div>
                 <label className="block text-xs font-bold text-[#4A3B32] mb-1.5">نبذة مختصرة عن الكتاب (اختياري)</label>
