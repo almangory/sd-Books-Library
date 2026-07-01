@@ -27,7 +27,11 @@ import {
   Loader2,
   Settings,
   Globe,
-  Share2
+  Share2,
+  Trash2,
+  PenSquare,
+  Plus,
+  MessageSquare
 } from "lucide-react";
 import { motion, AnimatePresence } from "motion/react";
 import * as pdfjsLib from "pdfjs-dist";
@@ -567,6 +571,8 @@ export default function ThreeDFlipbook({
   const [bookmarks, setBookmarks] = useState<Bookmark[]>([]);
   const [notes, setNotes] = useState<BookNote[]>([]);
   const [activeNoteText, setActiveNoteText] = useState<string>("");
+  const [onPageNoteText, setOnPageNoteText] = useState<string>("");
+  const [activePageNoteOverlay, setActivePageNoteOverlay] = useState<number | null>(null);
   const [showNotesPanel, setShowNotesPanel] = useState<boolean>(false);
   const [showSidebar, setShowSidebar] = useState<boolean>(false);
   const [sidebarTab, setSidebarTab] = useState<"index" | "bookmarks" | "notes">("index");
@@ -1492,6 +1498,23 @@ export default function ThreeDFlipbook({
     localStorage.setItem(`notes_${book.id}`, JSON.stringify(updated));
   };
 
+  // Add Note on specific page
+  const handleAddPageNote = (pageNumber: number, text: string) => {
+    if (!text.trim()) return;
+    
+    const newNote: BookNote = {
+      id: Math.random().toString(36).substr(2, 9),
+      bookId: book.id,
+      page: pageNumber,
+      text: text.trim(),
+      createdAt: Date.now()
+    };
+    
+    const updated = [newNote, ...notes];
+    setNotes(updated);
+    localStorage.setItem(`notes_${book.id}`, JSON.stringify(updated));
+  };
+
   // Zoom toggles
   const handleZoomIn = () => {
     setSettings(prev => ({ ...prev, zoom: Math.min(200, prev.zoom + 15) }));
@@ -1501,6 +1524,160 @@ export default function ThreeDFlipbook({
   const handleZoomOut = () => {
     setSettings(prev => ({ ...prev, zoom: Math.max(100, prev.zoom - 15) }));
     setRenderedPages({}); // Clear cache
+  };
+
+  const renderPageNotes = (pageNumber: number | null) => {
+    if (!pageNumber) return null;
+    
+    const pageNotes = notes.filter(n => n.page === pageNumber);
+    const isOpen = activePageNoteOverlay === pageNumber;
+    
+    return (
+      <div 
+        className="absolute top-3 left-3 z-30 select-none"
+        onClick={(e) => e.stopPropagation()} // Prevent turning pages when interacting with notes
+      >
+        {/* Toggle Button / Badge */}
+        <button
+          onClick={() => {
+            if (isOpen) {
+              setActivePageNoteOverlay(null);
+            } else {
+              setActivePageNoteOverlay(pageNumber);
+              setOnPageNoteText("");
+            }
+          }}
+          className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full shadow-md border text-xs font-bold transition-all duration-300 hover:scale-105 active:scale-95 ${
+            pageNotes.length > 0
+              ? "bg-amber-100 hover:bg-amber-200 border-amber-300 text-amber-900"
+              : settings.darkMode
+                ? "bg-[#27211D] hover:bg-[#3A3029] border-[#3A3029] text-amber-200"
+                : settings.sepiaMode
+                  ? "bg-[#FAF2DF] hover:bg-[#FAF0D9] border-[#DFCDB0] text-[#5C4033]"
+                  : "bg-white hover:bg-stone-50 border-stone-200 text-stone-700"
+          }`}
+          title={currentLang === "en" ? `Page ${pageNumber} Notes` : `ملاحظات الصفحة ${pageNumber}`}
+        >
+          <PenSquare className="w-3.5 h-3.5" />
+          <span>
+            {currentLang === "en" ? "Notes" : "ملاحظات"}
+            {pageNotes.length > 0 && ` (${pageNotes.length})`}
+          </span>
+        </button>
+
+        {/* Overlay Card */}
+        <AnimatePresence>
+          {isOpen && (
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95, y: 10 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.95, y: 10 }}
+              transition={{ duration: 0.2 }}
+              className={`absolute top-10 ${currentLang === "en" ? "left-0" : "right-0"} w-72 max-h-96 rounded-2xl shadow-2xl border-2 p-4 flex flex-col z-40 ${
+                settings.darkMode
+                  ? "bg-[#27211D] border-[#3A3029] text-[#FAF6EE]"
+                  : settings.sepiaMode
+                    ? "bg-[#FAF2DF] border-[#DFCDB0] text-[#4E3529]"
+                    : "bg-white border-stone-200 text-stone-800"
+              }`}
+              style={{
+                boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.1)"
+              }}
+            >
+              {/* Header */}
+              <div className="flex items-center justify-between pb-2 border-b border-stone-200/40 mb-3">
+                <span className="font-serif font-bold text-xs">
+                  {currentLang === "en" ? `Notes on Page ${pageNumber}` : `ملاحظات الصفحة ${pageNumber}`}
+                </span>
+                <button
+                  onClick={() => setActivePageNoteOverlay(null)}
+                  className="p-1 rounded-lg hover:bg-black/5 text-stone-400 hover:text-stone-600 transition-colors"
+                >
+                  <X className="w-4 h-4" />
+                </button>
+              </div>
+
+              {/* List of existing notes on this page */}
+              <div className="flex-1 overflow-y-auto mb-3 space-y-2 pr-1 max-h-40 custom-scrollbar text-right">
+                {pageNotes.length === 0 ? (
+                  <p className="text-[10px] text-stone-400 text-center py-4">
+                    {currentLang === "en" ? "No notes on this page yet." : "لا توجد ملاحظات على هذه الصفحة بعد."}
+                  </p>
+                ) : (
+                  pageNotes.map((note) => (
+                    <div 
+                      key={note.id} 
+                      className={`p-2.5 rounded-xl text-xs relative group border ${
+                        settings.darkMode
+                          ? "bg-[#1E1916] border-[#3A3029]"
+                          : "bg-amber-50/70 border-amber-100"
+                      }`}
+                    >
+                      <button
+                        onClick={() => handleDeleteNote(note.id)}
+                        className="absolute top-1 left-1 p-1 rounded hover:bg-rose-50 text-stone-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                        title={currentLang === "en" ? "Delete note" : "حذف الملاحظة"}
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                      
+                      <p className={`whitespace-pre-wrap ${currentLang === "en" ? "pl-5 text-left" : "pr-5 text-right"} font-sans leading-relaxed text-[11px]`}>
+                        {note.text}
+                      </p>
+                      
+                      <span className={`block text-[8px] opacity-40 mt-1 ${currentLang === "en" ? "text-right" : "text-left"}`}>
+                        {new Date(note.createdAt).toLocaleTimeString(currentLang === "en" ? "en-US" : "ar-EG", {
+                          hour: "numeric",
+                          minute: "2-digit"
+                        })}
+                      </span>
+                    </div>
+                  ))
+                )}
+              </div>
+
+              {/* Form to add note */}
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  if (!onPageNoteText.trim()) return;
+                  handleAddPageNote(pageNumber, onPageNoteText);
+                  setOnPageNoteText("");
+                }}
+                className="flex flex-col gap-2 pt-2 border-t border-stone-200/40"
+              >
+                <textarea
+                  value={onPageNoteText}
+                  onChange={(e) => setOnPageNoteText(e.target.value)}
+                  placeholder={currentLang === "en" ? "Type note here..." : "اكتب ملاحظتك القصيرة هنا..."}
+                  className={`w-full p-2 text-xs rounded-xl border focus:ring-2 focus:ring-amber-500/50 focus:outline-none resize-none h-14 ${
+                    settings.darkMode
+                      ? "bg-[#1E1916] border-[#3A3029] text-[#FAF6EE]"
+                      : "bg-stone-50 border-stone-200 text-stone-800"
+                  }`}
+                  maxLength={200}
+                />
+                
+                <div className="flex justify-between items-center text-[9px] text-stone-400">
+                  <span>{onPageNoteText.length}/200</span>
+                  <button
+                    type="submit"
+                    disabled={!onPageNoteText.trim()}
+                    className={`px-3 py-1.5 rounded-lg text-[10px] font-bold transition-all ${
+                      onPageNoteText.trim()
+                        ? "bg-amber-600 hover:bg-amber-700 text-white shadow-sm"
+                        : "bg-stone-100 text-stone-400 cursor-not-allowed"
+                    }`}
+                  >
+                    {currentLang === "en" ? "Add Note" : "إضافة"}
+                  </button>
+                </div>
+              </form>
+            </motion.div>
+          )}
+        </AnimatePresence>
+      </div>
+    );
   };
 
   // Calculate pages showing in double page mode
@@ -2107,6 +2284,8 @@ export default function ThreeDFlipbook({
                         </div>
                       )}
                       
+                      {renderPageNotes(currentPage)}
+                      
                       {/* Page number footer */}
                       <div className="absolute bottom-2 left-4 right-4 flex justify-between items-center text-[10px] font-mono opacity-60">
                         <span>{book.title}</span>
@@ -2226,6 +2405,8 @@ export default function ThreeDFlipbook({
                               </div>
                             )}
 
+                            {renderPageNotes(doubleLeftPage)}
+
                             {/* Page Indicator */}
                             {doubleLeftPage && (
                               <div className="absolute bottom-2.5 left-6 right-3 flex justify-between text-[10px] font-mono opacity-65">
@@ -2283,6 +2464,8 @@ export default function ThreeDFlipbook({
                                 <span className="text-xs">بداية الغلاف</span>
                               </div>
                             )}
+
+                            {renderPageNotes(doubleRightPage)}
 
                             {/* Page Indicator */}
                             {doubleRightPage && (

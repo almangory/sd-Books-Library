@@ -97,6 +97,7 @@ export const translations = {
     child_stories: "قصص وحكايات",
     child_edu: "كتب تعليمية",
     child_mag: "مجلات أطفال",
+    child_history: "قصص تاريخية وحضارة",
 
     // Voice search statuses
     voice_listening: "جاري الاستماع... تحدّث الآن باللغة العربية أو الإنجليزية",
@@ -242,6 +243,7 @@ export const translations = {
     child_stories: "Stories & Tales",
     child_edu: "Educational Books",
     child_mag: "Children's Magazines",
+    child_history: "Historical Tales & Civilization",
 
     // Voice search statuses
     voice_listening: "Listening... speak now in Arabic or English",

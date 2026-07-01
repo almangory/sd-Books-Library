@@ -85,7 +85,8 @@ export const getBookCurriculumStage = (book: Book): string | null => {
 export const CHILDREN_SECTIONS = [
   "انجليزي",
   "عربي",
-  "باللهجة السودانية"
+  "باللهجة السودانية",
+  "تاريخ"
 ];
 
 export const getBookChildrenSection = (book: Book): string | null => {
@@ -101,6 +102,9 @@ export const getBookChildrenSection = (book: Book): string | null => {
 
   // 2. Try to find from title
   const titleLower = book.title.toLowerCase();
+  if (titleLower.includes("تاريخ") || titleLower.includes("حضارة") || titleLower.includes("قديم") || titleLower.includes("فرعون") || titleLower.includes("ملوك") || titleLower.includes("history") || titleLower.includes("ancient") || titleLower.includes("civilization")) {
+    return "تاريخ";
+  }
   if (titleLower.includes("سوداني") || titleLower.includes("سودانية") || titleLower.includes("السودان") || titleLower.includes("سودان")) {
     return "باللهجة السودانية";
   }
@@ -114,6 +118,9 @@ export const getBookChildrenSection = (book: Book): string | null => {
   // 3. Try to find from description
   if (book.description) {
     const descLower = book.description.toLowerCase();
+    if (descLower.includes("تاريخ") || descLower.includes("حضارة") || descLower.includes("قديم") || descLower.includes("فرعون") || descLower.includes("ملوك") || descLower.includes("history") || descLower.includes("ancient") || descLower.includes("civilization")) {
+      return "تاريخ";
+    }
     if (descLower.includes("سوداني") || descLower.includes("سودانية") || descLower.includes("السودان") || descLower.includes("سودان")) {
       return "باللهجة السودانية";
     }
@@ -1995,9 +2002,10 @@ export default function LibraryShelf({
               </div>
 
               {[
-                { id: "عربي", title: "قصص باللغة العربية", level: "عربي", icon: "🦁", bg: "from-amber-500 to-amber-700" },
-                { id: "انجليزي", title: "قصص باللغة الإنجليزية", level: "English", icon: "🧸", bg: "from-indigo-500 to-indigo-700" },
-                { id: "باللهجة السودانية", title: "حكايات باللهجة السودانية", level: "سوداني", icon: "🇸🇩", bg: "from-emerald-600 to-emerald-800" }
+                { id: "عربي", title: language === "en" ? "Stories in Arabic" : "قصص باللغة العربية", level: language === "en" ? "Arabic" : "عربي", icon: "🦁", bg: "from-amber-500 to-amber-700" },
+                { id: "انجليزي", title: language === "en" ? "Stories in English" : "قصص باللغة الإنجليزية", level: language === "en" ? "English" : "انجليزي", icon: "🧸", bg: "from-indigo-500 to-indigo-700" },
+                { id: "باللهجة السودانية", title: language === "en" ? "Tales in Sudanese Dialect" : "حكايات باللهجة السودانية", level: language === "en" ? "Sudanese" : "سوداني", icon: "🇸🇩", bg: "from-emerald-600 to-emerald-800" },
+                { id: "تاريخ", title: language === "en" ? "Historical Tales & Civilization" : "قصص تاريخية وحضارة", level: language === "en" ? "History" : "تاريخ", icon: "⏳", bg: "from-orange-800 to-amber-950" }
               ].map((stage, sIdx) => {
                 const count = books.filter(b => b.category === "children" && getBookChildrenSection(b) === stage.id).length;
                 let leaningClass = "";
@@ -2037,7 +2045,7 @@ export default function LibraryShelf({
 
                           <div className="mx-auto mt-2 text-center">
                             <span className="inline-block px-2.5 py-0.5 bg-black/30 rounded-full border border-white/10 text-[9px] font-bold text-amber-200">
-                              📚 {count} كتب
+                              📚 {count} {language === "en" ? (count === 1 ? "book" : "books") : "كتب"}
                             </span>
                           </div>
                         </div>
