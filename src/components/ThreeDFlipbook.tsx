@@ -1573,7 +1573,8 @@ export default function ThreeDFlipbook({
               animate={{ opacity: 1, scale: 1, y: 0 }}
               exit={{ opacity: 0, scale: 0.95, y: 10 }}
               transition={{ duration: 0.2 }}
-              className={`absolute top-10 ${currentLang === "en" ? "left-0" : "right-0"} w-72 max-h-96 rounded-2xl shadow-2xl border-2 p-4 flex flex-col z-40 ${
+              dir={currentLang === "en" ? "ltr" : "rtl"}
+              className={`absolute top-10 left-0 w-72 max-h-96 rounded-2xl shadow-2xl border-2 p-4 flex flex-col z-40 ${
                 settings.darkMode
                   ? "bg-[#27211D] border-[#3A3029] text-[#FAF6EE]"
                   : settings.sepiaMode
@@ -1598,7 +1599,7 @@ export default function ThreeDFlipbook({
               </div>
 
               {/* List of existing notes on this page */}
-              <div className="flex-1 overflow-y-auto mb-3 space-y-2 pr-1 max-h-40 custom-scrollbar text-right">
+              <div className="flex-1 overflow-y-auto mb-3 space-y-2 px-1 max-h-40 custom-scrollbar">
                 {pageNotes.length === 0 ? (
                   <p className="text-[10px] text-stone-400 text-center py-4">
                     {currentLang === "en" ? "No notes on this page yet." : "لا توجد ملاحظات على هذه الصفحة بعد."}
@@ -1615,17 +1616,17 @@ export default function ThreeDFlipbook({
                     >
                       <button
                         onClick={() => handleDeleteNote(note.id)}
-                        className="absolute top-1 left-1 p-1 rounded hover:bg-rose-50 text-stone-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity"
+                        className={`absolute top-1.5 ${currentLang === "en" ? "right-1.5" : "left-1.5"} p-1 rounded hover:bg-rose-50 text-stone-400 hover:text-rose-600 opacity-0 group-hover:opacity-100 transition-opacity`}
                         title={currentLang === "en" ? "Delete note" : "حذف الملاحظة"}
                       >
                         <Trash2 className="w-3.5 h-3.5" />
                       </button>
                       
-                      <p className={`whitespace-pre-wrap ${currentLang === "en" ? "pl-5 text-left" : "pr-5 text-right"} font-sans leading-relaxed text-[11px]`}>
+                      <p className={`whitespace-pre-wrap font-sans leading-relaxed text-[11px] ${currentLang === "en" ? "pr-6 pl-1" : "pl-6 pr-1"}`}>
                         {note.text}
                       </p>
                       
-                      <span className={`block text-[8px] opacity-40 mt-1 ${currentLang === "en" ? "text-right" : "text-left"}`}>
+                      <span className="block text-[8px] opacity-40 mt-1">
                         {new Date(note.createdAt).toLocaleTimeString(currentLang === "en" ? "en-US" : "ar-EG", {
                           hour: "numeric",
                           minute: "2-digit"
